@@ -39,6 +39,7 @@ GEM
 
 PLATFORMS
   arm64-darwin-24
+  arm64-darwin-25
 
 DEPENDENCIES
   httparty (~> 0.24.0)
