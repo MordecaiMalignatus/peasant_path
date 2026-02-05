@@ -1,4 +1,5 @@
 require 'httparty'
+require 'nokogiri'
 
 class RoyalRoadClient
   include HTTParty
@@ -12,6 +13,7 @@ class RoyalRoadClient
     toc = self.class.get(uri)
     doc = Nokogiri::HTML(toc.body)
     {
+      description: doc.css('.description').text.strip,
       title: doc.css('.fic-title').css('h1').text.strip,
       # TODO(sar): Capture author profile URL
       author: doc.css('.fic-title').css('a').text.strip,

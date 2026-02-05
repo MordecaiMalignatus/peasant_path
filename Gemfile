@@ -10,3 +10,5 @@ gem "httparty", "~> 0.24.0"
 gem "rspec", "~> 3.13"
 
 gem "pry", "~> 0.16.0"
+
+gem "diffy", "~> 3.4"
