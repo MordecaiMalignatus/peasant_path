@@ -37,6 +37,10 @@ class Fic
     diff = persist_fic_info(@fic_id, @author, @title, @description)
   end
 
+  def self.persist_chapter(fic_id, chapter_id, chapter_title, chapter_text)
+    # existing_chapter = file.read()
+  end
+
   # The RR fic ID found in the URL is considered the canon identifier of a fic,
   # after that, title and author and description are all mutable. Returns a
   # string-diff of what's changed.

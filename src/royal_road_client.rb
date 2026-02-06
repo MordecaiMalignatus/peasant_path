@@ -1,6 +1,8 @@
 require 'httparty'
 require 'nokogiri'
 
+require_relative './chapter'
+
 class RoyalRoadClient
   include HTTParty
   base_uri 'www.royalroad.com'
@@ -28,10 +30,23 @@ class RoyalRoadClient
     links.map {|link| [link.content().strip, link['href']]}.to_h
   end
 
-  # Query a chapter with its full URI and return the body HTML as a NodeSet.
+  # Query a chapter with its full URI and return a Chapter.
   def chapter(uri)
     resp = self.class.get(uri)
     doc = Nokogiri::HTML(resp.body)
-    doc.css '.chapter-content'
+    nav_buttons = doc.css('.nav-buttons').css('.btn')
+
+    res = Chapter.new(uri)
+    res.chapter_text = doc.css('.chapter-content').to_s # preserve the HTML here.
+    res.chapter_title = doc.css('h1').text
+    res.previous_chapter = extract_button_link(nav_buttons[0])
+    res.next_chapter = extract_button_link(nav_buttons[1])
+
+    res
+  end
+
+  def self.extract_button_link(elem)
+    return nil if !elem.attribute("disabled").nil?
+    elem.attribute("href").value
   end
 end
