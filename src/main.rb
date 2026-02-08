@@ -12,7 +12,7 @@ class Main
 
   def initialize
     @config = Config.read_from_disk
-    @rr = RoyalRoadClient.new
+    @rr = RoyalRoadClient.new(@config)
 
     args = ARGV
     command = args[0]
@@ -31,11 +31,12 @@ class Main
     params.each do |p|
       uri = URI(p)
       raise 'Not an RR URL' if uri.host != "www.royalroad.com"
+      fic_id = Fic.uri_to_fic_id(uri.to_s)
 
-      unless @config.followed_stories.include?(uri.to_s)
-        @config.followed_stories << uri.to_s
-        fic = Fic.new(uri: uri.to_s, config: @config)
-        fic.fetch_fic_info.persist
+      unless @config.followed_stories.include?(fic_id)
+        @config.followed_stories << fic_id
+        fic = Fic.new(fic_id: fic_id, config: @config)
+        fic.fetch_fic_info.persist_fic_info
         puts "Followed #{fic.title}"
       else
         puts "Aready followed this fic, skipping config edit."
@@ -49,10 +50,11 @@ class Main
   # progress report.
   def cmd_pull(params)
     puts "Pulling all followed fics..."
-    fics = @config.followed_stories.map { |fic| Fic.new(uri: fic, config: @config) }
+
+    fics = @config.followed_stories.map { |fic| Fic.from_disk(fic, @config) }
     fics.each do |f|
       puts "Pulling #{f.title}..."
-      f.persist
+      f.pull
     end
   end
 end

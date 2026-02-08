@@ -7,8 +7,9 @@ class RoyalRoadClient
   include HTTParty
   base_uri 'www.royalroad.com'
 
-  def initialize()
+  def initialize(config)
     @options = {query: {} }
+    @config = config
   end
 
   def fic_info(uri)
@@ -23,7 +24,7 @@ class RoyalRoadClient
   end
 
   # Pick out the chapter titles and their URLs.
-  def chapters(id)
+  def chapter_overview(id)
     toc = self.class.get("/fiction/#{id}/")
     doc = Nokogiri::HTML(toc.body)
     links = doc.css('.chapter-row').map {|row| row.css('a')[0] }
@@ -31,16 +32,16 @@ class RoyalRoadClient
   end
 
   # Query a chapter with its full URI and return a Chapter.
-  def chapter(uri)
+  def fetch_chapter(uri)
     resp = self.class.get(uri)
     doc = Nokogiri::HTML(resp.body)
     nav_buttons = doc.css('.nav-buttons').css('.btn')
 
-    res = Chapter.new(uri)
+    res = Chapter.new(uri, @config)
     res.chapter_text = doc.css('.chapter-content').to_s # preserve the HTML here.
     res.chapter_title = doc.css('h1').text
-    res.previous_chapter = extract_button_link(nav_buttons[0])
-    res.next_chapter = extract_button_link(nav_buttons[1])
+    res.previous_chapter = RoyalRoadClient.extract_button_link(nav_buttons[0])
+    res.next_chapter = RoyalRoadClient.extract_button_link(nav_buttons[1])
 
     res
   end
