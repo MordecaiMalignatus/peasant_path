@@ -54,13 +54,9 @@ class Fic
     self
   end
 
-  def chapter_overview
-    @rr.chapter_overview(@fic_id)
-  end
-
   def pull
     persist_fic_info
-    chapter_toc = chapter_overview.map { |title, uri| "https://www.royalroad.com#{uri}" }
+    chapter_toc = @rr.chapter_overview(@fic_id).map { |title, uri| "https://www.royalroad.com#{uri}" }
     existing_chapters = @chapters.map {|c| c.uri }
     chapters_to_pull = chapter_toc.filter { |rr_chapter| !existing_chapters.include?(rr_chapter) }
 
@@ -92,7 +88,7 @@ class Fic
       end
     end
 
-    new_state = {author: author, title: title, description: description, chapters: chapters}.to_json
+    new_state = JSON.pretty_generate({author: author, title: title, description: description, chapters: chapters})
     # TODO(sar): This is fine for now, but this diffs unprettied json and is not
     # fantastic. Also should be verbosity-gated.
     puts Diffy::Diff.new(existing_state, new_state)

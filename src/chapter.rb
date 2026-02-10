@@ -35,14 +35,14 @@ class Chapter
     end
 
     file_slug = @uri.dup.split('/')[-1]
-    body = {
+    body = JSON.pretty_generate({
       fic_id: @fic_id,
       chapter_uri: @uri,
       chapter_title: @chapter_title,
       chapter_text: @chapter_text,
       next_chapter: @next_chapter,
       previous_chapter: @previous_chapter,
-    }.to_json
+    })
     begin
       existing_chapter = File.read("#{@state_path}/#{file_slug}")
       diff = Diffy::Diff.new(body, existing_chapter)

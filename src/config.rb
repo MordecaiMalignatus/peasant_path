@@ -35,10 +35,10 @@ class Config
   end
 
   def write_to_disk
-    content = {
+    content = JSON.pretty_generate({
       last_run: @last_run,
       followed_stories: @followed_stories
-    }.to_json
+    })
     File.write(STATE_HOME + "/config.json", content)
   end
 end
