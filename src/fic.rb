@@ -37,9 +37,13 @@ class Fic
 
   def discover_chapters_on_disk()
     items = Dir.glob("#{@state_path}/*")
-    raise "No fic_info.json found for a fic that wants to discover chapters." if items.empty?
-    chapters = items - ["#{@state_path}/fic_info.json"]
-    chapters.map {|chapter_file| Chapter.read_from_disk(chapter_file, @config) }
+    if items.empty?
+      puts "No existing fic_info.json file found when discovering, starting from scratch..."
+      []
+    else
+      chapters = items - ["#{@state_path}/fic_info.json"]
+      chapters.map {|chapter_file| Chapter.read_from_disk(chapter_file, @config) }
+    end
   end
 
   def fetch_fic_info
