@@ -19,6 +19,7 @@ class Main
     case command
     when "add" then cmd_add(args[1..])
     when "pull" then cmd_pull(args[1..])
+    when "build" then cmd_build(args[1..])
     else
       puts "valid subcommands are: add, pull"
     end
@@ -55,6 +56,15 @@ class Main
     fics.each do |f|
       puts "Pulling #{f.title}..."
       f.pull
+    end
+  end
+
+  # Build an Epub for the specified fic_id
+  def cmd_build(params)
+    params.each do |fid|
+      puts "Trying to build epub for fic ID #{fid}..."
+      f = Fic.new(fic_id: fid, config: @config)
+      f.to_book.build("#{f.title}.epub")
     end
   end
 end

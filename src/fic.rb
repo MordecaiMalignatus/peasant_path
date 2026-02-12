@@ -1,5 +1,6 @@
 require_relative './royal_road_client'
 require_relative './config'
+require_relative './epub'
 
 require 'json'
 require 'fileutils'
@@ -68,6 +69,11 @@ class Fic
       @rr.fetch_chapter(link).persist
       @chapters << link
     end
+  end
+
+  def to_book
+    self.pull
+    Epub.new(self)
   end
 
   def persist_fic_info()

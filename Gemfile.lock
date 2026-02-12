@@ -6,6 +6,9 @@ GEM
     csv (3.3.5)
     diff-lcs (1.6.2)
     diffy (3.4.4)
+    gepub (2.0.1)
+      nokogiri (>= 1.8.2, < 2.0)
+      rubyzip (>= 3.0, < 3.3)
     httparty (0.24.0)
       csv
       mini_mime (>= 1.0.0)
@@ -37,6 +40,7 @@ GEM
       diff-lcs (>= 1.2.0, < 2.0)
       rspec-support (~> 3.13.0)
     rspec-support (3.13.6)
+    rubyzip (3.2.2)
 
 PLATFORMS
   arm64-darwin-24
@@ -44,6 +48,7 @@ PLATFORMS
 
 DEPENDENCIES
   diffy (~> 3.4)
+  gepub (~> 2.0)
   httparty (~> 0.24.0)
   nokogiri (~> 1.19)
   pry (~> 0.16.0)
@@ -55,6 +60,7 @@ CHECKSUMS
   csv (3.3.5) sha256=6e5134ac3383ef728b7f02725d9872934f523cb40b961479f69cf3afa6c8e73f
   diff-lcs (1.6.2) sha256=9ae0d2cba7d4df3075fe8cd8602a8604993efc0dfa934cff568969efb1909962
   diffy (3.4.4) sha256=79384ab5ca82d0e115b2771f0961e27c164c456074bd2ec46b637ebf7b6e47e3
+  gepub (2.0.1) sha256=b7f2667d6edcb034b8e8809293b245b62b2815de12b950ad4a282bcafe73b15b
   httparty (0.24.0) sha256=cd93eec3d92c327df77b545e71123a38394e5ae723fb739bca18e0e75143b0ac
   io-console (0.8.2) sha256=d6e3ae7a7cc7574f4b8893b4fca2162e57a825b223a177b7afa236c5ef9814cc
   method_source (1.1.0) sha256=181301c9c45b731b4769bc81e8860e72f9161ad7d66dd99103c9ab84f560f5c5
@@ -69,6 +75,7 @@ CHECKSUMS
   rspec-expectations (3.13.5) sha256=33a4d3a1d95060aea4c94e9f237030a8f9eae5615e9bd85718fe3a09e4b58836
   rspec-mocks (3.13.7) sha256=0979034e64b1d7a838aaaddf12bf065ea4dc40ef3d4c39f01f93ae2c66c62b1c
   rspec-support (3.13.6) sha256=2e8de3702427eab064c9352fe74488cc12a1bfae887ad8b91cba480ec9f8afb2
+  rubyzip (3.2.2) sha256=c0ed99385f0625415c8f05bcae33fe649ed2952894a95ff8b08f26ca57ea5b3c
 
 BUNDLED WITH
   4.0.3
