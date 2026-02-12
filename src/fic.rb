@@ -42,7 +42,7 @@ class Fic
       puts "No existing fic_info.json file found when discovering, starting from scratch..."
       []
     else
-      chapters = items - ["#{@state_path}/fic_info.json"]
+      chapters = items - ["#{@state_path}/fic_info.json", "#{@state_path}/cover_image.jpg"]
       chapters.map {|chapter_file| Chapter.read_from_disk(chapter_file, @config) }
     end
   end
@@ -51,6 +51,7 @@ class Fic
     info = @rr.fic_info(@uri.to_s)
     @author = info[:author]
     @title = info[:title]
+    @cover_image = info[:cover_image]
     @description = info[:description]
     self
   end
@@ -76,14 +77,18 @@ class Fic
     Epub.new(self)
   end
 
+  def cover_image_path
+    "#{state_path}/cover_image.jpg"
+  end
+
   def persist_fic_info()
-    Fic.persist_fic_info(@fic_id, @author, @title, @description, @chapters, @config)
+    Fic.persist_fic_info(@fic_id, @author, @title, @description, @chapters, @cover_image, @config)
   end
 
   # The RR fic ID found in the URL is considered the canon identifier of a fic,
   # after that, title and author and description are all mutable. Returns a
   # string-diff of what's changed.
-  def self.persist_fic_info(fic_id, author, title, description, chapters, config)
+  def self.persist_fic_info(fic_id, author, title, description, chapters, cover_image, config)
     existing_state = {author: "", title: "", description: "", chapters: []}
     state_path = "#{Config::STATE_HOME}/#{fic_id}"
     begin
@@ -94,12 +99,19 @@ class Fic
       end
     end
 
+    chapters = chapters.map(&:to_slug)
     new_state = JSON.pretty_generate({author: author, title: title, description: description, chapters: chapters})
     # TODO(sar): This is fine for now, but this diffs unprettied json and is not
     # fantastic. Also should be verbosity-gated.
     puts Diffy::Diff.new(existing_state, new_state)
 
     FileUtils.mkdir_p(state_path)
+
+    unless File.exist?("#{state_path}/cover_image.jpg")
+      puts "Saving cover image..."
+      File.write("#{state_path}/cover_image.jpg", cover_image)
+    end
+
     File.write("#{state_path}/fic_info.json", new_state)
   end
 

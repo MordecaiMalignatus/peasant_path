@@ -21,19 +21,38 @@ class Epub
     book.add_title(fic.title, title_type: GEPUB::TITLE_TYPE::MAIN, lang: 'en', display_seq: 1)
     book.add_creator(fic.author, display_seq: 1)
 
+    File.open(fic.cover_image_path) do |f|
+      book.add_item('img/cover_image.jpg', content: f).cover_image
+    end
+    book.ordered do
+      book.add_item('text/cover.xhtml', content: format_title_page(fic.title, 'img/cover_image.jpg')).landmark(type: 'cover', title: 'cover page')
+    end
     book
   end
 
   def self.add_chapters(fic, book)
     book.ordered do
-      fic.chapters.each do |c|
-      book.add_item('text/chapter-1.xhtml')
+      fic.chapters.each_with_index do |c,i|
+      book.add_item("text/chapter-#{i}.xhtml")
         .add_content(format_chapter_in_xhtml(c))
-        .toc_text('Chapter 1')
+        .toc_text(c.chapter_title)
         .landmark(type: 'bodymatter', title: 'placeholder')
       end
     end
     book
+  end
+
+  def self.format_title_page(title, cover_image_path)
+    StringIO.new(<<~TEXT)
+     <html xmlns="http://www.w3.org/1999/xhtml">
+     <head>
+       <title>#{title}</title>
+      </head>
+      <body>
+      <h1>#{title}</h1>
+      <img src="../#{cover_image_path}" />
+      </body></html>
+    TEXT
   end
 
   def self.format_chapter_in_xhtml(chapter)

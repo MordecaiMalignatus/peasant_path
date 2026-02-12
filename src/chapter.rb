@@ -29,6 +29,10 @@ class Chapter
     c
   end
 
+  def to_slug
+    @chapter_id
+  end
+
   def persist
     if @chapter_title.nil? || @chapter_text.nil?
       raise 'Fetch the chapter before trying to save it to disk.'
@@ -44,13 +48,7 @@ class Chapter
       previous_chapter: @previous_chapter,
     })
     begin
-      existing_chapter = File.read("#{@state_path}/#{file_slug}")
-      diff = Diffy::Diff.new(body, existing_chapter)
-      unless diff == ''
-        puts "Found change in #{fic_id}/#{file_slug}, displaying diff:"
-        puts diff
-        puts "\nIf you want to accept these changes, delete the file at #{@state_path}/#{file_slug}"
-      end
+      File.read("#{@state_path}/#{file_slug}")
     rescue Errno::ENOENT
       if @config.verbose
         puts "Chapter #{chapter_title} not found, saving..."

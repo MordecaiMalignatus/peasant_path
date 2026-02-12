@@ -15,11 +15,14 @@ class RoyalRoadClient
   def fic_info(uri)
     toc = self.class.get(uri)
     doc = Nokogiri::HTML(toc.body)
+    cover_image_url = doc.css('.fic-header').css('img').attribute('src').value
+
     {
       description: doc.css('.description').text.strip,
       title: doc.css('.fic-title').css('h1').text.strip,
       # TODO(sar): Capture author profile URL
       author: doc.css('.fic-title').css('a').text.strip,
+      cover_image: download_picture(cover_image_url),
     }
   end
 
@@ -49,5 +52,13 @@ class RoyalRoadClient
   def self.extract_button_link(elem)
     return nil if !elem.attribute("disabled").nil?
     elem.attribute("href").value
+  end
+
+  def download_picture(url)
+    resp = HTTParty.get(url)
+    if resp.code != 200
+      raise "cover_image: got unexpected response code from the CDN: #{resp.inspect}"
+    end
+    resp.body
   end
 end
