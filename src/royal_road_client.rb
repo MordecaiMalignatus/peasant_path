@@ -39,7 +39,7 @@ class RoyalRoadClient
 
     res = Chapter.new(uri, @config)
     res.chapter_text = doc.css('.chapter-content').to_s # preserve the HTML here.
-    res.chapter_title = doc.css('h1').text
+    res.chapter_title = doc.css('div.col-md-5.col-lg-6.col-md-offset-1 > h1').text.strip
     res.previous_chapter = RoyalRoadClient.extract_button_link(nav_buttons[0])
     res.next_chapter = RoyalRoadClient.extract_button_link(nav_buttons[1])
 
