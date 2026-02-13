@@ -36,7 +36,7 @@ class Main
 
       unless @config.followed_stories.include?(fic_id)
         @config.followed_stories << fic_id
-        fic = Fic.new(fic_id: fic_id, config: @config)
+        fic = Fic.new(fic_id: fic_id, config: @config, chapters: [])
         fic.fetch_fic_info.persist_fic_info
         puts "Followed #{fic.title}"
       else

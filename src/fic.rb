@@ -18,7 +18,12 @@ class Fic
     @fic_id = fic_id
     @uri = "https://www.royalroad.com/fiction/#{fic_id}/"
     @state_path = "#{Config::STATE_HOME}/#{fic_id}"
-    @chapters = discovered_chapters
+    if chapters.nil? || chapters.empty?
+      @chapters = discover_chapters_on_disk
+    else
+      @chapters = chapters
+    end
+
     @title = nil
     @author = nil
     @rr = RoyalRoadClient.new(config)
@@ -27,7 +32,7 @@ class Fic
   def self.from_disk(fic_id, config)
     content = JSON.parse(File.read("#{Config::STATE_HOME}/#{fic_id}/fic_info.json"))
 
-    fic = new(fic_id: fic_id, config: config)
+    fic = new(fic_id: fic_id, config: config, chapters: content['chapters'])
     fic.author = content['author']
     fic.title = content['title']
     fic.description = content['description']
@@ -69,6 +74,13 @@ class Fic
       @rr.fetch_chapter(link).persist
       @chapters << link
     end
+  end
+
+  # Well, by default, the chapters are in the order that Glob finds them in,
+  # usually lexicographical. This is not the same as you know, reading order.
+  # Luckily we capture that information in the chapter files.
+  def order_chapters
+
   end
 
   def to_book

@@ -1,5 +1,6 @@
 require_relative './chapter'
 require_relative './royal_road_client'
+require_relative './config'
 
 # Represents a singular chapter of a fic.
 class Chapter
@@ -17,6 +18,11 @@ class Chapter
     @chapter_id = match[2]
     @config = config
     @state_path = "#{Config::STATE_HOME}/#{fic_id}"
+  end
+
+  def self.read_via_chapter_id(fic_id, chapter_id, config)
+    path = "#{Config::STATE_HOME}/#{fic_id}/#{chapter_id}.json"
+    self.read_from_disk(path, config)
   end
 
   def self.read_from_disk(file_path, config)
@@ -38,7 +44,6 @@ class Chapter
       raise 'Fetch the chapter before trying to save it to disk.'
     end
 
-    file_slug = @uri.dup.split('/')[-1]
     body = JSON.pretty_generate({
       fic_id: @fic_id,
       chapter_uri: @uri,
@@ -48,13 +53,12 @@ class Chapter
       previous_chapter: @previous_chapter,
     })
     begin
-      File.read("#{@state_path}/#{file_slug}")
+      File.read("#{@state_path}/#{to_slug}")
     rescue Errno::ENOENT
       if @config.verbose
         puts "Chapter #{chapter_title} not found, saving..."
       end
-      File.write("#{@state_path}/#{file_slug}", body)
+      File.write("#{@state_path}/#{to_slug}", body)
     end
   end
-
 end
