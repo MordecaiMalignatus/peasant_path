@@ -11,14 +11,14 @@ class Fic
   attr_accessor :title, :uri, :author, :chapters, :description
   attr_reader :rr, :fic_id, :state_path, :config
 
-  def initialize(fic_id:, config:)
+  def initialize(fic_id:, config:, chapters:)
     raise 'wtf' if fic_id.nil?
 
     @config = config
     @fic_id = fic_id
     @uri = "https://www.royalroad.com/fiction/#{fic_id}/"
     @state_path = "#{Config::STATE_HOME}/#{fic_id}"
-    @chapters = discover_chapters_on_disk
+    @chapters = discovered_chapters
     @title = nil
     @author = nil
     @rr = RoyalRoadClient.new(config)
@@ -31,7 +31,6 @@ class Fic
     fic.author = content['author']
     fic.title = content['title']
     fic.description = content['description']
-    fic.chapters = content['chapters']
 
     fic
   end

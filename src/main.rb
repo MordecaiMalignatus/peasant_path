@@ -63,7 +63,7 @@ class Main
   def cmd_build(params)
     params.each do |fid|
       puts "Trying to build epub for fic ID #{fid}..."
-      f = Fic.new(fic_id: fid, config: @config)
+      f = Fic.from_disk(fid, @config)
       f.to_book.build("#{f.title}.epub")
     end
   end
