@@ -21,7 +21,10 @@ class Fic
     if chapters.nil? || chapters.empty?
       @chapters = discover_chapters_on_disk
     else
-      @chapters = chapters
+      # Chapters were found, but we just persist the slug ID of the chapters
+      # because otherwise it would embed the whole chapter content, which is not
+      # what we want in the fic metadata.
+      @chapters = chapters.map{ |slug| Chapter.read_from_disk("#{@state_path}/#{slug}.json", config) }
     end
 
     @title = nil
@@ -30,12 +33,22 @@ class Fic
   end
 
   def self.from_disk(fic_id, config)
-    content = JSON.parse(File.read("#{Config::STATE_HOME}/#{fic_id}/fic_info.json"))
+    state_path = "#{Config::STATE_HOME}/#{fic_id}"
+    begin
+      content = JSON.parse(File.read("#{state_path}/fic_info.json"))
 
-    fic = new(fic_id: fic_id, config: config, chapters: content['chapters'])
-    fic.author = content['author']
-    fic.title = content['title']
-    fic.description = content['description']
+      fic = new(fic_id: fic_id, config: config, chapters: content['chapters'])
+      fic.author = content['author']
+      fic.title = content['title']
+      fic.description = content['description']
+    rescue Errno::ENOENT
+      # Directory was deleted from disk, but entry not removed from config (usually the case in testing)
+      puts "Fic metadata not found, retrieving..."
+      FileUtils.mkdir_p(state_path)
+      fic = new(fic_id: fic_id, config: config, chapters: nil)
+      fic.fetch_fic_info
+      fic.persist_fic_info
+    end
 
     fic
   end
@@ -80,7 +93,7 @@ class Fic
   # usually lexicographical. This is not the same as you know, reading order.
   # Luckily we capture that information in the chapter files.
   def order_chapters
-
+    raise 'TODO'
   end
 
   def to_book

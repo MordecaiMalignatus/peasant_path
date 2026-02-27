@@ -13,6 +13,10 @@ task :reset do
   sh 'rm ./test.epub'
 end
 
+task :pull do
+  sh 'bundle exec ruby ./src/main.rb pull'
+end
+
 task :end_to_end do
   sh 'bundle exec ruby ./src/main.rb add https://www.royalroad.com/fiction/107917/sky-pride'
   sh 'bundle exec ruby ./src/main.rb pull'
