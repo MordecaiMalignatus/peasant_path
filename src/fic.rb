@@ -20,11 +20,6 @@ class Fic
     @state_path = "#{Config::STATE_HOME}/#{fic_id}"
     if chapters.nil? || chapters.empty?
       @chapters = discover_chapters_on_disk
-    else
-      # Chapters were found, but we just persist the slug ID of the chapters
-      # because otherwise it would embed the whole chapter content, which is not
-      # what we want in the fic metadata.
-      @chapters = chapters.map{ |slug| Chapter.read_from_disk("#{@state_path}/#{slug}.json", config) }
     end
 
     @title = nil
@@ -36,8 +31,9 @@ class Fic
     state_path = "#{Config::STATE_HOME}/#{fic_id}"
     begin
       content = JSON.parse(File.read("#{state_path}/fic_info.json"))
+      chapters = content['chapters'].map{ |slug| Chapter.read_from_disk("#{@state_path}/#{slug}.json", config) }
 
-      fic = new(fic_id: fic_id, config: config, chapters: content['chapters'])
+      fic = new(fic_id: fic_id, config: config, chapters: chapters)
       fic.author = content['author']
       fic.title = content['title']
       fic.description = content['description']
@@ -84,8 +80,7 @@ class Fic
     end
 
     chapters_to_pull.each do |link|
-      @rr.fetch_chapter(link).persist
-      @chapters << link
+      @chapters << @rr.fetch_chapter(link).persist
     end
   end
 

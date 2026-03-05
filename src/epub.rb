@@ -12,7 +12,6 @@ class Epub
   def build(target_path)
     @book = Epub.set_metadata(@fic, @book)
     @book = Epub.add_chapters(@fic, @book)
-    File.write(target_path, "An Epub goes here")
     @book.generate_epub(target_path)
   end
 
@@ -56,10 +55,13 @@ class Epub
   end
 
   def self.format_chapter_in_xhtml(chapter)
+    fragment = Nokogiri::HTML.fragment(chapter.chapter_text)
+    fragment.css('p').each {|el| el.remove if el.text.strip == ' ' }
+
     StringIO.new(<<~TEXT)
     <html xmlns="http://www.w3.org/1999/xhtml">
     <head><title>#{chapter.chapter_title}</title></head>
-    <body>#{chapter.chapter_text}</body></html>
+    <body>#{fragment.to_xhtml}</body></html>
     TEXT
   end
 end

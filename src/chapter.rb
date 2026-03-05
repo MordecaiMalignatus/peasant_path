@@ -60,5 +60,7 @@ class Chapter
       end
       File.write("#{@state_path}/#{to_slug}", body)
     end
+
+    self
   end
 end
