@@ -61,7 +61,9 @@ class Epub
     StringIO.new(<<~TEXT)
     <html xmlns="http://www.w3.org/1999/xhtml">
     <head><title>#{chapter.chapter_title}</title></head>
-    <body>#{fragment.to_xhtml}</body></html>
+    <body>
+    <h2>#{ chapter.chapter_title }</h2>
+    #{fragment.to_xhtml}</body></html>
     TEXT
   end
 end
