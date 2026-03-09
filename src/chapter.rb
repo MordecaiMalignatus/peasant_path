@@ -5,7 +5,7 @@ require_relative './config'
 # Represents a singular chapter of a fic.
 class Chapter
   attr_reader :fic_id, :chapter_id, :uri
-  attr_accessor :chapter_title, :chapter_text, :authors_opening_note, :authors_closing_note, :next_chapter, :previous_chapter
+  attr_accessor :chapter_title, :chapter_text, :next_chapter, :previous_chapter
 
   CHAPTER_REGEX = /https:\/\/www\.royalroad\.com\/fiction\/(\d+)\/[a-z-]+\/chapter\/(\d+)/
 
@@ -17,16 +17,9 @@ class Chapter
     @fic_id = match[1]
     @chapter_id = match[2]
     @config = config
-    @state_path = "#{Config::STATE_HOME}/#{fic_id}"
   end
 
-  def self.read_via_chapter_id(fic_id, chapter_id, config)
-    path = "#{Config::STATE_HOME}/#{fic_id}/#{chapter_id}.json"
-    self.read_from_disk(path, config)
-  end
-
-  def self.read_from_disk(file_path, config)
-    content = JSON.parse(File.read(file_path))
+  def self.read_from_disk(content, config)
     c = new(content['chapter_uri'], config)
     c.chapter_title = content['chapter_title']
     c.chapter_text = content['chapter_text']
@@ -53,12 +46,12 @@ class Chapter
       previous_chapter: @previous_chapter,
     })
     begin
-      File.read("#{@state_path}/#{to_slug}")
+      @repository.read_chapter(@fic_id, @chapter_id)
     rescue Errno::ENOENT
       if @config.verbose
         puts "Chapter #{chapter_title} not found, saving..."
       end
-      File.write("#{@state_path}/#{to_slug}", body)
+      @repository.write_chapter(@fic_id, @chapter_id, body)
     end
 
     self

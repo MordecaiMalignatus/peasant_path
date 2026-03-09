@@ -9,15 +9,15 @@ class Fic
   FIC_ID_REGEX = /https:\/\/www\.royalroad\.com\/fiction\/(\d+)\//
 
   attr_accessor :title, :uri, :author, :chapters, :description
-  attr_reader :rr, :fic_id, :state_path, :config
+  attr_reader :rr, :fic_id, :repository
 
-  def initialize(fic_id:, config:, chapters:)
+  def initialize(fic_id:, chapters:, repository:)
     raise 'wtf' if fic_id.nil?
+    raise 'missing required disk repository' if repository.nil?
 
-    @config = config
+    @repository = repository
     @fic_id = fic_id
     @uri = "https://www.royalroad.com/fiction/#{fic_id}/"
-    @state_path = "#{Config::STATE_HOME}/#{fic_id}"
     if chapters.nil? || chapters.empty?
       @chapters = discover_chapters_on_disk
     end
@@ -27,10 +27,9 @@ class Fic
     @rr = RoyalRoadClient.new(config)
   end
 
-  def self.from_disk(fic_id, config)
-    state_path = "#{Config::STATE_HOME}/#{fic_id}"
+  def self.from_disk(fic_id, repository)
     begin
-      content = JSON.parse(File.read("#{state_path}/fic_info.json"))
+      content = repository.read_fic_info(fic_id)
       chapters = content['chapters'].map{ |slug| Chapter.read_from_disk("#{@state_path}/#{slug}.json", config) }
 
       fic = new(fic_id: fic_id, config: config, chapters: chapters)
@@ -40,8 +39,7 @@ class Fic
     rescue Errno::ENOENT
       # Directory was deleted from disk, but entry not removed from config (usually the case in testing)
       puts "Fic metadata not found, retrieving..."
-      FileUtils.mkdir_p(state_path)
-      fic = new(fic_id: fic_id, config: config, chapters: nil)
+      fic = new(fic_id: fic_id, chapters: nil)
       fic.fetch_fic_info
       fic.persist_fic_info
     end
@@ -50,14 +48,9 @@ class Fic
   end
 
   def discover_chapters_on_disk()
-    items = Dir.glob("#{@state_path}/*")
-    if items.empty?
-      puts "No existing fic_info.json file found when discovering, starting from scratch..."
-      []
-    else
-      chapters = items - ["#{@state_path}/fic_info.json", "#{@state_path}/cover_image.jpg"]
-      chapters.map {|chapter_file| Chapter.read_from_disk(chapter_file, @config) }
-    end
+    @repository
+      .list_chapters(@fic_id)
+      .map {|chapter_file| Chapter.read_from_disk(chapter_file, @config) }
   end
 
   def fetch_fic_info
@@ -84,20 +77,9 @@ class Fic
     end
   end
 
-  # Well, by default, the chapters are in the order that Glob finds them in,
-  # usually lexicographical. This is not the same as you know, reading order.
-  # Luckily we capture that information in the chapter files.
-  def order_chapters
-    raise 'TODO'
-  end
-
   def to_book
     self.pull
     Epub.new(self)
-  end
-
-  def cover_image_path
-    "#{state_path}/cover_image.jpg"
   end
 
   def persist_fic_info()
@@ -109,9 +91,8 @@ class Fic
   # string-diff of what's changed.
   def self.persist_fic_info(fic_id, author, title, description, chapters, cover_image, config)
     existing_state = {author: "", title: "", description: "", chapters: []}
-    state_path = "#{Config::STATE_HOME}/#{fic_id}"
     begin
-      existing_state = File.read("#{state_path}/fic_info.json")
+      existing_state = @repository.read_fic_info(@fic_id)
     rescue Errno::ENOENT
       if config.verbose
         puts "Fic information not found, starting from blank"
@@ -124,14 +105,12 @@ class Fic
     # fantastic. Also should be verbosity-gated.
     puts Diffy::Diff.new(existing_state, new_state)
 
-    FileUtils.mkdir_p(state_path)
-
     unless File.exist?("#{state_path}/cover_image.jpg")
       puts "Saving cover image..."
-      File.write("#{state_path}/cover_image.jpg", cover_image)
+      @repository.write_cover_image(@fic_id, cover_image)
     end
 
-    File.write("#{state_path}/fic_info.json", new_state)
+    @repository.write_fic_infop(@fic_id, new_state)
   end
 
   def self.uri_to_fic_id(uri)

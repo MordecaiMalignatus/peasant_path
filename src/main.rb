@@ -1,6 +1,7 @@
 require_relative './royal_road_client'
 require_relative './fic'
 require_relative './config'
+require_relative './disk_repository'
 
 require 'pry'
 require 'uri'
@@ -8,11 +9,12 @@ require 'pp'
 
 class Main
   attr_accessor :config
-  attr_reader :rr
+  attr_reader :rr, :repo
 
   def initialize
-    @config = Config.read_from_disk
     @rr = RoyalRoadClient.new(@config)
+    @repo = DiskRepository.new("#{Dir.home}/.config/peasant_road")
+    @config = Config.from_config_file(@repo.read_config_file)
 
     args = ARGV
     command = args[0]
@@ -52,7 +54,7 @@ class Main
   def cmd_pull(params)
     puts "Pulling all followed fics..."
 
-    fics = @config.followed_stories.map { |fic| Fic.from_disk(fic, @config) }
+    fics = @config.followed_stories.map { |fic| Fic.from_disk(fic, repository) }
     fics.each do |f|
       puts "Pulling #{f.title}..."
       f.pull
