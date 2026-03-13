@@ -41,6 +41,7 @@ GEM
       rspec-support (~> 3.13.0)
     rspec-support (3.13.6)
     rubyzip (3.2.2)
+    rufo (0.18.2)
 
 PLATFORMS
   arm64-darwin-24
@@ -53,6 +54,7 @@ DEPENDENCIES
   nokogiri (~> 1.19)
   pry (~> 0.16.0)
   rspec (~> 3.13)
+  rufo (~> 0.18.2)
 
 CHECKSUMS
   bigdecimal (4.0.1) sha256=8b07d3d065a9f921c80ceaea7c9d4ae596697295b584c296fe599dd0ad01c4a7
@@ -76,6 +78,7 @@ CHECKSUMS
   rspec-mocks (3.13.7) sha256=0979034e64b1d7a838aaaddf12bf065ea4dc40ef3d4c39f01f93ae2c66c62b1c
   rspec-support (3.13.6) sha256=2e8de3702427eab064c9352fe74488cc12a1bfae887ad8b91cba480ec9f8afb2
   rubyzip (3.2.2) sha256=c0ed99385f0625415c8f05bcae33fe649ed2952894a95ff8b08f26ca57ea5b3c
+  rufo (0.18.2) sha256=f279bea838aae7cd51149413a2dfa3383044b1c93f1469ceaddd1ca3824fc46f
 
 BUNDLED WITH
   4.0.3

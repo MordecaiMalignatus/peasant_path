@@ -1,5 +1,5 @@
-require 'json'
-require 'diffy'
+require "json"
+require "diffy"
 
 # The Config is a simple JSON file that contains some basic settings and
 # information. It's halfway between state file and configuration file, though it
@@ -24,7 +24,7 @@ class Config
   def to_json
     JSON.pretty_generate({
                            last_run: @last_run,
-                           followed_stories: @followed_stories
+                           followed_stories: @followed_stories,
                          })
   end
 end

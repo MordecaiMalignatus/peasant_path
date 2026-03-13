@@ -1,37 +1,37 @@
-require 'rspec'
-require 'nokogiri'
+require "rspec"
+require "nokogiri"
 
-require_relative '../src/royal_road_client'
-require_relative '../src/config'
+require_relative "../src/royal_road_client"
+require_relative "../src/config"
 
 RSpec.describe RoyalRoadClient do
   let(:mock_config) { Config.new(last_run: Time.now, followed_stories: []) }
   let(:client) { RoyalRoadClient.new(mock_config) }
-  let(:sky_pride_html) { File.read(File.expand_path('../../data/sky-pride.html', __FILE__)) }
-  let(:chapter_1_html) { File.read(File.expand_path('../../data/chapter-1.html', __FILE__)) }
+  let(:sky_pride_html) { File.read(File.expand_path("../../data/sky-pride.html", __FILE__)) }
+  let(:chapter_1_html) { File.read(File.expand_path("../../data/chapter-1.html", __FILE__)) }
 
-  describe '.extract_button_link' do
+  describe ".extract_button_link" do
     it "should correctly extract nav-button links" do
-      input = Nokogiri::XML.parse(<<~XML).css('.btn')[0]
-      <a class="btn btn-primary col-xs-12" href="/fiction/107917/sky-pride/chapter/2113560/chapter-2--gourmet-in-the-garbage">
-         Next <br class="visible-xs-block">Chapter <i class="far fa-chevron-double-right ml-3"></i>
-      </a>
+      input = Nokogiri::XML.parse(<<~XML).css(".btn")[0]
+        <a class="btn btn-primary col-xs-12" href="/fiction/107917/sky-pride/chapter/2113560/chapter-2--gourmet-in-the-garbage">
+           Next <br class="visible-xs-block">Chapter <i class="far fa-chevron-double-right ml-3"></i>
+        </a>
       XML
       expect(RoyalRoadClient.extract_button_link(input)).to eq "/fiction/107917/sky-pride/chapter/2113560/chapter-2--gourmet-in-the-garbage"
     end
 
     it "should return nil when the button is disabled" do
-      input = Nokogiri::XML.parse(<<~XML).css('.btn')[0]
-      <button class="btn btn-primary col-xs-12" disabled="disabled">
-          <i class="far fa-chevron-double-left mr-3"></i> Previous <br class="visible-xs-block">Chapter
-      </button>
+      input = Nokogiri::XML.parse(<<~XML).css(".btn")[0]
+        <button class="btn btn-primary col-xs-12" disabled="disabled">
+            <i class="far fa-chevron-double-left mr-3"></i> Previous <br class="visible-xs-block">Chapter
+        </button>
       XML
 
       expect(RoyalRoadClient.extract_button_link(input)).to be_nil
     end
   end
 
-  describe '#fic_info' do
+  describe "#fic_info" do
     before do
       # Mock HTTParty to return our fixture data
       allow(RoyalRoadClient).to receive(:get).and_return(
@@ -73,7 +73,7 @@ RSpec.describe RoyalRoadClient do
     end
   end
 
-  describe '#chapter_overview' do
+  describe "#chapter_overview" do
     before do
       # Mock HTTParty to return our fixture data
       allow(RoyalRoadClient).to receive(:get).with("/fiction/107917/").and_return(
@@ -115,7 +115,7 @@ RSpec.describe RoyalRoadClient do
     end
   end
 
-  describe '#fetch_chapter' do
+  describe "#fetch_chapter" do
     let(:chapter_uri) { "https://www.royalroad.com/fiction/107917/sky-pride/chapter/2113501/chapter-1--in-the-care-of-a-hateful-god" }
 
     before do
@@ -165,7 +165,7 @@ RSpec.describe RoyalRoadClient do
     end
   end
 
-  describe '#download_picture' do
+  describe "#download_picture" do
     it "downloads image data successfully" do
       mock_response = double(code: 200, body: "fake_image_data")
       allow(HTTParty).to receive(:get).with("https://example.com/image.jpg").and_return(mock_response)

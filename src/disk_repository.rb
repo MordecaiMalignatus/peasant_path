@@ -1,6 +1,6 @@
-require 'fileutils'
-require 'json'
-require_relative './config'
+require "fileutils"
+require "json"
+require_relative "./config"
 
 class DiskRepository
   attr_reader :root_path
@@ -24,17 +24,23 @@ class DiskRepository
     File.write("#{@root_path}/config.json", content)
   end
 
+  def read_chapter_from_path(path)
+    # This is obtained from list_chapters with an absolute path, no need to rebuild it.
+    JSON.parse(File.read(path))
+  end
+
+  # This is used to read with a slug from the state file.
   def read_chapter(fic_id, chapter_id)
     JSON.parse(File.read("#{@root_path}/#{fic_id}/#{chapter_id}"))
   end
 
   def write_chapter(fic_id, chapter_id, content)
-    FileUtils.mkdir_p(state_path)
-    File.write("#{@root_path}/#{fic_id}/#{content}", content)
+    FileUtils.mkdir_p("#{@root_path}/#{fic_id}")
+    File.write("#{@root_path}/#{fic_id}/#{chapter_id}", content)
   end
 
   def list_chapters(fic_id)
-    items = Dir.glob("#{@state_path}/*")
+    items = Dir.glob("#{@root_path}/#{fic_id}/*")
     if items.empty?
       puts "No existing fic_info.json file found when discovering, starting from scratch..."
       []
@@ -48,7 +54,7 @@ class DiskRepository
   end
 
   def write_fic_info(fic_id, content)
-    FileUtils.mkdir_p(state_path)
+    FileUtils.mkdir_p("#{@root_path}/#{fic_id}/")
     File.write("#{@root_path}/#{fic_id}/fic_info.json", content)
   end
 
@@ -56,8 +62,12 @@ class DiskRepository
     File.read("#{@root_path}/#{fic_id}/cover_image.jpg")
   end
 
+  def cover_image_path(fic_id)
+    "#{@root_path}/#{fic_id}/cover_image.jpg"
+  end
+
   def write_cover_image(fic_id, content)
-    FileUtils.mkdir_p(state_path)
+    FileUtils.mkdir_p("#{@root_path}/#{fic_id}/")
     File.write("#{@root_path}/#{fic_id}/cover_image.jpg", content)
   end
 end
