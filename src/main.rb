@@ -46,7 +46,7 @@ class Main
       end
     end
 
-    @config.write_to_disk
+    @repo.write_config_file(@config.to_json)
   end
 
   # For each followed fic, pull all the chapters, save the new ones, and

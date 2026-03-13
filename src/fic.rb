@@ -11,18 +11,11 @@ class Fic
   attr_accessor :title, :uri, :author, :chapters, :description
   attr_reader :rr, :fic_id, :repository
 
-  def initialize(fic_id:, chapters:, repository:)
-    raise "wtf" if fic_id.nil?
-    raise "missing required disk repository" if repository.nil?
-
+  def initialize(fic_id:, repository:)
     @repository = repository
     @fic_id = fic_id
     @uri = "https://www.royalroad.com/fiction/#{fic_id}/"
-    if chapters.nil? || chapters.empty?
-      @chapters = discover_chapters_on_disk
-    end
-    @chapters ||= []
-
+    @chapters = discover_chapters_on_disk
     @title = nil
     @author = nil
     @rr = RoyalRoadClient.new
@@ -31,19 +24,14 @@ class Fic
   def self.from_disk(fic_id, repository)
     begin
       content = repository.read_fic_info(fic_id)
-      chapters = content["chapters"].map do |slug|
-        chapter_content = repository.read_chapter(fic_id, slug)
-        Chapter.from_disk_content(chapter_content, repository)
-      end
-
-      fic = new(fic_id: fic_id, chapters: chapters, repository: repository)
+      fic = new(fic_id: fic_id, repository: repository)
       fic.author = content["author"]
       fic.title = content["title"]
       fic.description = content["description"]
     rescue Errno::ENOENT
       # Directory was deleted from disk, but entry not removed from config (usually the case in testing)
       puts "Fic metadata not found, retrieving..."
-      fic = new(fic_id: fic_id, chapters: nil, repository: repository)
+      fic = new(fic_id: fic_id, repository: repository)
       fic.fetch_fic_info
       fic.persist_fic_info
     end
@@ -67,11 +55,11 @@ class Fic
   end
 
   def pull
-    persist_fic_info
     chapter_toc = @rr.chapter_overview(@fic_id).map { |title, uri| "https://www.royalroad.com#{uri}" }
     existing_chapters = @chapters.map { |c| c.uri }
     chapters_to_pull = chapter_toc.filter { |rr_chapter| !existing_chapters.include?(rr_chapter) }
-
+    fetch_fic_info
+    persist_fic_info
     puts "#{chapters_to_pull.size} new chapters, scraping..."
 
     chapters_to_pull.each do |link|
@@ -92,14 +80,13 @@ class Fic
     begin
       existing_state = @repository.read_fic_info(@fic_id)
     rescue Errno::ENOENT
-      puts "Fic information not found, starting from blank"
+      puts "Fic information not found, starting from scratch"
     end
 
     chapters = @chapters.map(&:to_slug)
     new_state = JSON.pretty_generate({ author: @author, title: @title, description: @description, chapters: chapters })
-    # TODO(sar): This is fine for now, but this diffs unprettied json and is not
-    # fantastic. Also should be verbosity-gated.
-    puts Diffy::Diff.new(existing_state, new_state)
+
+    puts Diffy::Diff.new(JSON.pretty_generate(existing_state), new_state)
 
     puts "Saving cover image..."
     @repository.write_cover_image(@fic_id, @cover_image)
