@@ -15,3 +15,5 @@ gem "diffy", "~> 3.4"
 gem "gepub", "~> 2.0"
 
 gem "rufo", "~> 0.18.2"
+
+gem "thor", "~> 1.3"
