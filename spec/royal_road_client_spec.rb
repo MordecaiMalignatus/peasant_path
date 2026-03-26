@@ -1,14 +1,9 @@
-require "rspec"
-require "nokogiri"
+require "peasant_road"
 
-require_relative "../src/royal_road_client"
-require_relative "../src/config"
-
-RSpec.describe RoyalRoadClient do
-  let(:mock_config) { Config.new(last_run: Time.now, followed_stories: []) }
-  let(:client) { RoyalRoadClient.new(mock_config) }
-  let(:sky_pride_html) { File.read(File.expand_path("../../data/sky-pride.html", __FILE__)) }
-  let(:chapter_1_html) { File.read(File.expand_path("../../data/chapter-1.html", __FILE__)) }
+RSpec.describe PeasantRoad::RoyalRoadClient do
+  let(:client) { PeasantRoad::RoyalRoadClient.new }
+  let(:sky_pride_html) { File.read(File.expand_path("../data/sky-pride.html", __dir__)) }
+  let(:chapter_1_html) { File.read(File.expand_path("../data/chapter-1.html", __dir__)) }
 
   describe ".extract_button_link" do
     it "should correctly extract nav-button links" do
@@ -17,7 +12,7 @@ RSpec.describe RoyalRoadClient do
            Next <br class="visible-xs-block">Chapter <i class="far fa-chevron-double-right ml-3"></i>
         </a>
       XML
-      expect(RoyalRoadClient.extract_button_link(input)).to eq "/fiction/107917/sky-pride/chapter/2113560/chapter-2--gourmet-in-the-garbage"
+      expect(PeasantRoad::RoyalRoadClient.extract_button_link(input)).to eq "/fiction/107917/sky-pride/chapter/2113560/chapter-2--gourmet-in-the-garbage"
     end
 
     it "should return nil when the button is disabled" do
@@ -27,17 +22,15 @@ RSpec.describe RoyalRoadClient do
         </button>
       XML
 
-      expect(RoyalRoadClient.extract_button_link(input)).to be_nil
+      expect(PeasantRoad::RoyalRoadClient.extract_button_link(input)).to be_nil
     end
   end
 
   describe "#fic_info" do
     before do
-      # Mock HTTParty to return our fixture data
-      allow(RoyalRoadClient).to receive(:get).and_return(
+      allow(PeasantRoad::RoyalRoadClient).to receive(:get).and_return(
         double(body: sky_pride_html)
       )
-      # Mock download_picture to avoid actual HTTP requests
       allow(client).to receive(:download_picture).and_return("mock_image_data")
     end
 
@@ -75,8 +68,7 @@ RSpec.describe RoyalRoadClient do
 
   describe "#chapter_overview" do
     before do
-      # Mock HTTParty to return our fixture data
-      allow(RoyalRoadClient).to receive(:get).with("/fiction/107917/").and_return(
+      allow(PeasantRoad::RoyalRoadClient).to receive(:get).with("/fiction/107917/").and_return(
         double(body: sky_pride_html)
       )
     end
@@ -117,50 +109,50 @@ RSpec.describe RoyalRoadClient do
 
   describe "#fetch_chapter" do
     let(:chapter_uri) { "https://www.royalroad.com/fiction/107917/sky-pride/chapter/2113501/chapter-1--in-the-care-of-a-hateful-god" }
+    let(:mock_repo) { double("DiskRepository") }
 
     before do
-      # Mock HTTParty to return our fixture data
-      allow(RoyalRoadClient).to receive(:get).with(chapter_uri).and_return(
+      allow(PeasantRoad::RoyalRoadClient).to receive(:get).with(chapter_uri).and_return(
         double(body: chapter_1_html)
       )
     end
 
     it "returns a Chapter object" do
-      result = client.fetch_chapter(chapter_uri)
-      expect(result).to be_a(Chapter)
+      result = client.fetch_chapter(chapter_uri, mock_repo)
+      expect(result).to be_a(PeasantRoad::Chapter)
     end
 
     it "extracts the chapter title correctly" do
-      result = client.fetch_chapter(chapter_uri)
+      result = client.fetch_chapter(chapter_uri, mock_repo)
       expect(result.chapter_title).to eq "Chapter 1- In the Care of a Hateful God"
     end
 
     it "extracts the chapter content" do
-      result = client.fetch_chapter(chapter_uri)
+      result = client.fetch_chapter(chapter_uri, mock_repo)
       expect(result.chapter_text).to include("Where is my son? It is time for him to die.")
       expect(result.chapter_text).to include("chapter-content")
     end
 
     it "preserves HTML formatting in chapter text" do
-      result = client.fetch_chapter(chapter_uri)
+      result = client.fetch_chapter(chapter_uri, mock_repo)
       expect(result.chapter_text).to include("<p")
       expect(result.chapter_text).to include("</p>")
     end
 
     it "sets navigation correctly for first chapter" do
-      result = client.fetch_chapter(chapter_uri)
-      expect(result.previous_chapter).to be_nil  # First chapter has no previous
+      result = client.fetch_chapter(chapter_uri, mock_repo)
+      expect(result.previous_chapter).to be_nil
       expect(result.next_chapter).to eq "/fiction/107917/sky-pride/chapter/2113560/chapter-2--gourmet-in-the-garbage"
     end
 
     it "parses fic_id and chapter_id from URI" do
-      result = client.fetch_chapter(chapter_uri)
+      result = client.fetch_chapter(chapter_uri, mock_repo)
       expect(result.fic_id).to eq "107917"
       expect(result.chapter_id).to eq "2113501"
     end
 
     it "stores the original URI" do
-      result = client.fetch_chapter(chapter_uri)
+      result = client.fetch_chapter(chapter_uri, mock_repo)
       expect(result.uri).to eq chapter_uri
     end
   end

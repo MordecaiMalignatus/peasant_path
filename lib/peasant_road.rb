@@ -1,0 +1,8 @@
+require "peasant_road/version"
+require "peasant_road/config"
+require "peasant_road/disk_repository"
+require "peasant_road/chapter"
+require "peasant_road/royal_road_client"
+require "peasant_road/epub"
+require "peasant_road/fic"
+require "peasant_road/cli"
