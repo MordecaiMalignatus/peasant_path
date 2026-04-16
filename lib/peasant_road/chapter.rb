@@ -6,7 +6,7 @@ module PeasantRoad
     attr_reader :fic_id, :chapter_id, :uri, :repository
     attr_accessor :chapter_title, :chapter_text, :next_chapter, :previous_chapter
 
-    CHAPTER_REGEX = /https:\/\/www\.royalroad\.com\/fiction\/(\d+)\/[a-z-]+\/chapter\/(\d+)/
+    CHAPTER_REGEX = /https:\/\/www\.royalroad\.com\/fiction\/(\d+)\/[0-9a-z-]+\/chapter\/(\d+)/
 
     def initialize(uri, repository)
       @uri = uri
