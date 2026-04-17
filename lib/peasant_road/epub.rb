@@ -19,14 +19,14 @@ module PeasantRoad
 
     def self.set_metadata(fic, book)
       book.primary_identifier('https://www.royalroad.com/fiction/#{fic.fic_id}/', "BookID", "URL")
-      book.add_title(fic.title, title_type: GEPUB::TITLE_TYPE::MAIN, lang: "en", display_seq: 1)
+      book.add_title(fic.display_title, title_type: GEPUB::TITLE_TYPE::MAIN, lang: "en", display_seq: 1)
       book.add_creator(fic.author, display_seq: 1)
 
       File.open(fic.repository.cover_image_path(fic.fic_id)) do |f|
         book.add_item("img/cover_image.jpg", content: f).cover_image
       end
       book.ordered do
-        book.add_item("text/cover.xhtml", content: format_title_page(fic.title, "img/cover_image.jpg")).landmark(type: "cover", title: "cover page")
+        book.add_item("text/cover.xhtml", content: format_title_page(fic.display_title, "img/cover_image.jpg")).landmark(type: "cover", title: "cover page")
       end
       book
     end

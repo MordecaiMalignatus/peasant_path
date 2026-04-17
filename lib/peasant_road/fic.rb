@@ -6,7 +6,7 @@ module PeasantRoad
   class Fic
     FIC_ID_REGEX = /https:\/\/www\.royalroad\.com\/fiction\/(\d+)\//
 
-    attr_accessor :title, :uri, :author, :chapters, :description
+    attr_accessor :title, :uri, :author, :chapters, :description, :display_name
     attr_reader :rr, :fic_id, :repository
 
     def initialize(fic_id:, repository:)
@@ -16,7 +16,12 @@ module PeasantRoad
       @chapters = discover_chapters_on_disk
       @title = nil
       @author = nil
+      @display_name = nil
       @rr = RoyalRoadClient.new
+    end
+
+    def display_title
+      @display_name || @title
     end
 
     def self.from_disk(fic_id, repository)
@@ -26,6 +31,7 @@ module PeasantRoad
         fic.author = content["author"]
         fic.title = content["title"]
         fic.description = content["description"]
+        fic.display_name = content["display_name"]
       rescue Errno::ENOENT
         # Directory was deleted from disk, but entry not removed from config (usually the case in testing)
         puts "Fic metadata not found, retrieving..."
@@ -82,7 +88,7 @@ module PeasantRoad
       end
 
       chapters = @chapters.map(&:to_slug)
-      new_state = JSON.pretty_generate({ author: @author, title: @title, description: @description, chapters: chapters })
+      new_state = JSON.pretty_generate({ author: @author, title: @title, display_name: @display_name, description: @description, chapters: chapters })
 
       puts Diffy::Diff.new(JSON.pretty_generate(existing_state), new_state)
 

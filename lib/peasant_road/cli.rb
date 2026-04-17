@@ -15,6 +15,8 @@ module PeasantRoad
     end
 
     desc "add URL [URL...]", "Follow one or more RoyalRoad stories by URL"
+    option :name, type: :string, aliases: "-n", desc: "Override display name for the story"
+
     def add(*urls)
       if urls.empty?
         raise Thor::Error, "Please provide at least one RoyalRoad URL"
@@ -31,8 +33,9 @@ module PeasantRoad
         unless @config.followed_stories.include?(fic_id)
           @config.followed_stories << fic_id
           fic = Fic.new(fic_id: fic_id, repository: @repo)
+          fic.display_name = options[:name]
           fic.fetch_fic_info.persist_fic_info
-          puts "Followed #{fic.title}"
+          puts "Followed #{fic.display_title}"
         else
           puts "Already following this fic, skipping."
         end
@@ -42,17 +45,19 @@ module PeasantRoad
     end
 
     desc "pull", "Pull new chapters for all followed stories"
+
     def pull
       puts "Pulling all followed fics..."
 
       fics = @config.followed_stories.map { |fic| Fic.from_disk(fic, @repo) }
       fics.each do |f|
-        puts "Pulling #{f.title}..."
+        puts "Pulling #{f.display_title}..."
         f.pull
       end
     end
 
     desc "build FIC_ID [FIC_ID...]", "Build an EPUB for one or more followed stories"
+
     def build(*fic_ids)
       if fic_ids.empty?
         raise Thor::Error, "Please provide at least one fic ID"
@@ -61,7 +66,7 @@ module PeasantRoad
       fic_ids.each do |fid|
         puts "Building EPUB for fic ID #{fid}..."
         f = Fic.from_disk(fid, @repo)
-        f.to_book.build("#{f.title}.epub")
+        f.to_book.build("#{f.display_title}.epub")
       end
     end
   end
