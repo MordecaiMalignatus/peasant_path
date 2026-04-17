@@ -59,6 +59,7 @@ module PeasantRoad
     end
 
     def pull
+      @chapters = discover_chapters_on_disk
       chapter_toc = @rr.chapter_overview(@fic_id).map { |title, uri| "https://www.royalroad.com#{uri}" }
       existing_chapters = @chapters.map { |c| c.uri }
       chapters_to_pull = chapter_toc.filter { |rr_chapter| !existing_chapters.include?(rr_chapter) }
