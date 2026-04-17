@@ -1,5 +1,4 @@
 require "json"
-require "diffy"
 
 module PeasantRoad
   # The Config is a simple JSON file that contains some basic settings and
@@ -14,8 +13,6 @@ module PeasantRoad
       @last_run = last_run || Time.new
       @followed_stories = followed_stories || []
       @verbose = true
-
-      Diffy::Diff.default_format = :color
     end
 
     def self.from_config_file(config_content)

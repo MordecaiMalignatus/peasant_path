@@ -1,6 +1,5 @@
 require "json"
 require "fileutils"
-require "diffy"
 
 module PeasantRoad
   class Fic
@@ -90,8 +89,6 @@ module PeasantRoad
 
       chapters = @chapters.map(&:to_slug)
       new_state = JSON.pretty_generate({ author: @author, title: @title, display_name: @display_name, description: @description, chapters: chapters })
-
-      puts Diffy::Diff.new(JSON.pretty_generate(existing_state), new_state)
 
       puts "Saving cover image..."
       @repository.write_cover_image(@fic_id, @cover_image)
