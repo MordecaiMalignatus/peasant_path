@@ -29,7 +29,6 @@ module PeasantRoad
       {
         description: doc.css(".description").text.strip,
         title: doc.css(".fic-title").css("h1").text.strip,
-        # TODO(sar): Capture author profile URL
         author: doc.css(".fic-title").css("a").text.strip,
         cover_image: download_picture(cover_image_url),
         volumes: volumes,
@@ -57,21 +56,6 @@ module PeasantRoad
       JSON.load(extracted_json)
     end
 
-    # Query a chapter with its full URI and return a Chapter.
-    def fetch_chapter(uri, repo)
-      resp = self.class.get(uri)
-      doc = Nokogiri::HTML(resp.body)
-      nav_buttons = doc.css(".nav-buttons").css(".btn")
-
-      res = Chapter.new(uri, repo)
-      res.chapter_text = doc.css(".chapter-content").to_s
-      res.chapter_title = doc.css("div.col-md-5.col-lg-6.col-md-offset-1 > h1").text.strip
-      res.previous_chapter = RoyalRoadClient.extract_button_link(nav_buttons[0])
-      res.next_chapter = RoyalRoadClient.extract_button_link(nav_buttons[1])
-
-      res
-    end
-
     def enrich_overview_chapter!(overview_chapter)
       raise if overview_chapter.uri.nil?
 
@@ -88,7 +72,7 @@ module PeasantRoad
     end
 
     def self.extract_button_link(elem)
-      return nil if !elem.attribute("disabled").nil?
+      return nil if elem.attribute("disabled")
       elem.attribute("href").value
     end
 

@@ -138,56 +138,6 @@ RSpec.describe PeasantRoad::RoyalRoadClient do
     end
   end
 
-  describe "#fetch_chapter" do
-    let(:chapter_uri) { "https://www.royalroad.com/fiction/107917/sky-pride/chapter/2113501/chapter-1--in-the-care-of-a-hateful-god" }
-    let(:mock_repo) { double("DiskRepository") }
-
-    before do
-      allow(PeasantRoad::RoyalRoadClient).to receive(:get).with(chapter_uri).and_return(
-        double(body: chapter_1_html)
-      )
-    end
-
-    it "returns a Chapter object" do
-      result = client.fetch_chapter(chapter_uri, mock_repo)
-      expect(result).to be_a(PeasantRoad::Chapter)
-    end
-
-    it "extracts the chapter title correctly" do
-      result = client.fetch_chapter(chapter_uri, mock_repo)
-      expect(result.chapter_title).to eq "Chapter 1- In the Care of a Hateful God"
-    end
-
-    it "extracts the chapter content" do
-      result = client.fetch_chapter(chapter_uri, mock_repo)
-      expect(result.chapter_text).to include("Where is my son? It is time for him to die.")
-      expect(result.chapter_text).to include("chapter-content")
-    end
-
-    it "preserves HTML formatting in chapter text" do
-      result = client.fetch_chapter(chapter_uri, mock_repo)
-      expect(result.chapter_text).to include("<p")
-      expect(result.chapter_text).to include("</p>")
-    end
-
-    it "sets navigation correctly for first chapter" do
-      result = client.fetch_chapter(chapter_uri, mock_repo)
-      expect(result.previous_chapter).to be_nil
-      expect(result.next_chapter).to eq "/fiction/107917/sky-pride/chapter/2113560/chapter-2--gourmet-in-the-garbage"
-    end
-
-    it "parses fic_id and chapter_id from URI" do
-      result = client.fetch_chapter(chapter_uri, mock_repo)
-      expect(result.fic_id).to eq "107917"
-      expect(result.chapter_id).to eq "2113501"
-    end
-
-    it "stores the original URI" do
-      result = client.fetch_chapter(chapter_uri, mock_repo)
-      expect(result.uri).to eq chapter_uri
-    end
-  end
-
   describe "#download_picture" do
     it "downloads image data successfully" do
       mock_response = double(code: 200, body: "fake_image_data")

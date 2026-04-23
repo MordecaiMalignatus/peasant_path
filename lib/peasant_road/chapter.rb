@@ -48,9 +48,7 @@ module PeasantRoad
     end
 
     def persist
-      if @chapter_title.nil? || @chapter_text.nil?
-        raise "Fetch the chapter before trying to save it to disk."
-      end
+      raise "Fetch the chapter before trying to save it to disk." if @chapter_title.nil? || @chapter_text.nil?
 
       body = JSON.pretty_generate({
         fic_id: @fic_id,

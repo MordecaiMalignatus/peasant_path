@@ -7,12 +7,10 @@ module PeasantRoad
   # directly.
   class Config
     attr_accessor :last_run, :followed_stories
-    attr_reader :verbose
 
     def initialize(last_run: nil, followed_stories: nil)
       @last_run = last_run || Time.new
       @followed_stories = followed_stories || []
-      @verbose = true
     end
 
     def self.from_config_file(config_content)

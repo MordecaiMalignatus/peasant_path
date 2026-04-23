@@ -34,7 +34,6 @@ module PeasantRoad
         fic.display_name = content["display_name"]
         fic.volumes = content["volumes"] || []
       rescue Errno::ENOENT
-        # Directory was deleted from disk, but entry not removed from config (usually the case in testing)
         puts "Fic metadata not found, retrieving..."
         fic = new(fic_id: fic_id, repository: repository)
         fic.fetch_fic_info
@@ -98,20 +97,13 @@ module PeasantRoad
     end
 
     def to_book
-      self.pull
+      pull
       Epub.new(self)
     end
 
     # The RR fic ID found in the URL is considered the canon identifier of a fic,
     # after that, title and author and description are all mutable.
     def persist_fic_info
-      existing_state = { author: "", title: "", description: "", chapters: [] }
-      begin
-        existing_state = @repository.read_fic_info(@fic_id)
-      rescue Errno::ENOENT
-        puts "Fic information not found, starting from scratch"
-      end
-
       chapters = @chapters.map(&:to_slug)
       new_state = JSON.pretty_generate({ author: @author, title: @title, display_name: @display_name, description: @description, volumes: @volumes, chapters: chapters })
 
@@ -125,10 +117,6 @@ module PeasantRoad
 
     def self.uri_to_fic_id(uri)
       FIC_ID_REGEX.match(uri)[1]
-    end
-
-    def self.fic_id_to_uri(fic_id)
-      "https://www.royalroad.com/fiction/#{fic_id}/"
     end
   end
 end
