@@ -59,15 +59,14 @@ module PeasantRoad
 
     def pull
       @chapters = discover_chapters_on_disk
-      chapter_toc = @rr.chapter_overview(@fic_id).map { |title, uri| "https://www.royalroad.com#{uri}" }
-      existing_chapters = @chapters.map { |c| c.uri }
-      chapters_to_pull = chapter_toc.filter { |rr_chapter| !existing_chapters.include?(rr_chapter) }
+      chapter_toc = @rr.chapter_overview(@fic_id).map { |chapter_hash| Chapter.from_overview_hash(chapter_hash, @repository) }
+      chapters_to_pull = chapter_toc.filter { |rr_chapter| !@chapters.include?(rr_chapter) }
       fetch_fic_info
       persist_fic_info
       puts "#{chapters_to_pull.size} new chapters, scraping..."
 
-      chapters_to_pull.each do |link|
-        @chapters << @rr.fetch_chapter(link, @repository).persist
+      chapters_to_pull.each do |c|
+        @chapters << @rr.enrich_overview_chapter!(c).persist
       end
     end
 
@@ -77,8 +76,7 @@ module PeasantRoad
     end
 
     # The RR fic ID found in the URL is considered the canon identifier of a fic,
-    # after that, title and author and description are all mutable. Returns a
-    # string-diff of what's changed.
+    # after that, title and author and description are all mutable.
     def persist_fic_info
       existing_state = { author: "", title: "", description: "", chapters: [] }
       begin
@@ -90,7 +88,7 @@ module PeasantRoad
       chapters = @chapters.map(&:to_slug)
       new_state = JSON.pretty_generate({ author: @author, title: @title, display_name: @display_name, description: @description, chapters: chapters })
 
-      puts "Saving cover image..."
+      puts "Saving cover image..." unless File.exist?(@repository.cover_image_path(@fic_id))
       @repository.write_cover_image(@fic_id, @cover_image)
       @repository.write_fic_info(@fic_id, new_state)
     end

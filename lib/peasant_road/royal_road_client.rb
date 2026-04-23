@@ -24,12 +24,24 @@ module PeasantRoad
       }
     end
 
-    # Pick out the chapter titles and their URLs.
+    # Pick out the chapter titles and their URLs. Returns a list of hashes
+    # nicked from the JS of the rendered HTML.
     def chapter_overview(id)
       toc = self.class.get("/fiction/#{id}/")
-      doc = Nokogiri::HTML(toc.body)
-      links = doc.css(".chapter-row").map { |row| row.css("a")[0] }
-      links.map { |link| [link.content.strip, link["href"]] }.to_h
+      # There's an embedded script tag that assigns the chapters loaded to the
+      # `window.chapters` variable, to render the page without needing to make
+      # another API request. The SPA takes this and builds the UI. Extracting
+      # this via JS would require running a puppeteered browser, but luckily
+      # there is exactly one assignment to state done statically, and we can nab
+      # it via string manipulation :v
+      extracted_json = toc.body
+        .lines
+        .find { |line| /window\.chapters =/.match line }
+        .strip
+        .delete_prefix("window.chapters = ")
+        .delete_suffix(";")
+
+      JSON.load(extracted_json)
     end
 
     # Query a chapter with its full URI and return a Chapter.
@@ -45,6 +57,21 @@ module PeasantRoad
       res.next_chapter = RoyalRoadClient.extract_button_link(nav_buttons[1])
 
       res
+    end
+
+    def enrich_overview_chapter!(overview_chapter)
+      raise if overview_chapter.uri.nil?
+
+      resp = self.class.get(overview_chapter.uri)
+      doc = Nokogiri::HTML(resp.body)
+      nav_buttons = doc.css(".nav-buttons").css(".btn")
+
+      overview_chapter.chapter_text = doc.css(".chapter-content").to_s
+      overview_chapter.chapter_title = doc.css("div.col-md-5.col-lg-6.col-md-offset-1 > h1").text.strip
+      overview_chapter.previous_chapter = RoyalRoadClient.extract_button_link(nav_buttons[0])
+      overview_chapter.next_chapter = RoyalRoadClient.extract_button_link(nav_buttons[1])
+
+      overview_chapter
     end
 
     def self.extract_button_link(elem)
