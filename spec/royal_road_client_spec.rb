@@ -63,6 +63,36 @@ RSpec.describe PeasantRoad::RoyalRoadClient do
       expect(result).to have_key(:author)
       expect(result).to have_key(:description)
       expect(result).to have_key(:cover_image)
+      expect(result).to have_key(:volumes)
+      expect(result).to have_key(:volume_covers)
+    end
+
+    it "extracts volumes" do
+      result = client.fic_info("/fiction/107917/sky-pride")
+      expect(result[:volumes]).to be_a(Array)
+      expect(result[:volumes].size).to eq 4
+    end
+
+    it "extracts volume IDs and titles" do
+      result = client.fic_info("/fiction/107917/sky-pride")
+      first = result[:volumes].find { |v| v["order"] == 1 }
+      expect(first["id"]).to eq 10395
+      expect(first["title"]).to eq "Sky Pride V. 1 The Feral Daoist"
+    end
+
+    it "downloads a cover image for each volume" do
+      expect(client).to receive(:download_picture).with(
+        "https://www.royalroadcdn.com/public/volume-covers-large/107917-aacay9v76by-sky-pride-vol-1.jpg?time=1745199112"
+      ).and_return("vol1_image")
+      allow(client).to receive(:download_picture).and_return("mock_image_data")
+      client.fic_info("/fiction/107917/sky-pride")
+    end
+
+    it "returns volume covers keyed by volume ID" do
+      result = client.fic_info("/fiction/107917/sky-pride")
+      expect(result[:volume_covers]).to be_a(Hash)
+      expect(result[:volume_covers].keys).to contain_exactly(10395, 10397, 13235, 13278)
+      expect(result[:volume_covers][10395]).to eq "mock_image_data"
     end
   end
 
@@ -73,32 +103,33 @@ RSpec.describe PeasantRoad::RoyalRoadClient do
       )
     end
 
-    it "extracts chapter titles and URLs" do
+    it "returns an array of chapter hashes" do
       result = client.chapter_overview(107917)
-      expect(result).to be_a(Hash)
+      expect(result).to be_a(Array)
       expect(result).not_to be_empty
+    end
+
+    it "each chapter has required fields" do
+      result = client.chapter_overview(107917)
+      chapter = result.first
+      expect(chapter).to have_key("id")
+      expect(chapter).to have_key("title")
+      expect(chapter).to have_key("url")
+      expect(chapter).to have_key("volumeId")
+      expect(chapter).to have_key("order")
     end
 
     it "extracts the first chapter correctly" do
       result = client.chapter_overview(107917)
-      expect(result["Chapter 1- In the Care of a Hateful God"]).to eq "/fiction/107917/sky-pride/chapter/2113501/chapter-1--in-the-care-of-a-hateful-god"
+      first = result.find { |c| c["order"] == 0 }
+      expect(first["title"]).to eq "Chapter 1- In the Care of a Hateful God"
+      expect(first["url"]).to eq "/fiction/107917/sky-pride/chapter/2113501/chapter-1--in-the-care-of-a-hateful-god"
     end
 
-    it "extracts multiple chapters" do
+    it "extracts the first chapter's volume ID" do
       result = client.chapter_overview(107917)
-      expect(result.keys).to include(
-        "Chapter 1- In the Care of a Hateful God",
-        "Chapter 2- Gourmet in the Garbage",
-        "Chapter 3- Junkyard Classroom, Trash Heap Hospital",
-        "Chapter 4- First Steps on the Path",
-        "Chapter 5- Child of Destiny"
-      )
-    end
-
-    it "maps chapter titles to correct URLs" do
-      result = client.chapter_overview(107917)
-      expect(result["Chapter 2- Gourmet in the Garbage"]).to eq "/fiction/107917/sky-pride/chapter/2113560/chapter-2--gourmet-in-the-garbage"
-      expect(result["Chapter 10- Ruthless Child"]).to eq "/fiction/107917/sky-pride/chapter/2115445/chapter-10--ruthless-child"
+      first = result.find { |c| c["order"] == 0 }
+      expect(first["volumeId"]).to eq 10395
     end
 
     it "returns at least 10 chapters" do

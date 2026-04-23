@@ -14,6 +14,17 @@ module PeasantRoad
       toc = self.class.get(uri)
       doc = Nokogiri::HTML(toc.body)
       cover_image_url = doc.css(".fic-header").css("img").attribute("src").value
+      volumes_json = toc.body
+        .lines
+        .find { |line| /window\.volumes =/.match line }
+        .strip
+        .delete_prefix("window.volumes = ")
+        .delete_suffix(";")
+
+      volumes = JSON.load(volumes_json)
+      volume_covers = volumes.each_with_object({}) do |vol, h|
+        h[vol["id"]] = download_picture(vol["cover"])
+      end
 
       {
         description: doc.css(".description").text.strip,
@@ -21,6 +32,8 @@ module PeasantRoad
         # TODO(sar): Capture author profile URL
         author: doc.css(".fic-title").css("a").text.strip,
         cover_image: download_picture(cover_image_url),
+        volumes: volumes,
+        volume_covers: volume_covers,
       }
     end
 

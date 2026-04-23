@@ -56,6 +56,17 @@ module PeasantRoad
       end
     end
 
+    desc "backfill_volumes", "One-time migration: backfill volume and order data for existing chapters"
+
+    def backfill_volumes
+      fics = @config.followed_stories.map { |fic_id| Fic.from_disk(fic_id, @repo) }
+      fics.each do |f|
+        puts "Backfilling volumes for #{f.display_title}..."
+        f.backfill_chapter_volumes!
+      end
+      puts "Done."
+    end
+
     desc "build FIC_ID [FIC_ID...]", "Build an EPUB for one or more followed stories"
 
     def build(*fic_ids)

@@ -45,8 +45,21 @@ module PeasantRoad
         puts "No existing fic_info.json file found when discovering, starting from scratch..."
         []
       else
-        items - ["#{@root_path}/#{fic_id}/fic_info.json", "#{@root_path}/#{fic_id}/cover_image.jpg"]
+        items.reject { |f| non_chapter_files(fic_id).include?(f) }
       end
+    end
+
+    def volume_cover_image_path(fic_id, volume_id)
+      "#{@root_path}/#{fic_id}/volume_#{volume_id}_cover.jpg"
+    end
+
+    def write_volume_cover_image(fic_id, volume_id, content)
+      FileUtils.mkdir_p("#{@root_path}/#{fic_id}/")
+      File.write(volume_cover_image_path(fic_id, volume_id), content)
+    end
+
+    def read_volume_cover_image(fic_id, volume_id)
+      File.read(volume_cover_image_path(fic_id, volume_id))
     end
 
     def read_fic_info(fic_id)
@@ -69,6 +82,11 @@ module PeasantRoad
     def write_cover_image(fic_id, content)
       FileUtils.mkdir_p("#{@root_path}/#{fic_id}/")
       File.write("#{@root_path}/#{fic_id}/cover_image.jpg", content)
+    end
+
+    def non_chapter_files(fic_id)
+      base = "#{@root_path}/#{fic_id}"
+      ["#{base}/fic_info.json", "#{base}/cover_image.jpg"] + Dir.glob("#{base}/volume_*_cover.jpg")
     end
   end
 end

@@ -28,6 +28,9 @@ module PeasantRoad
       c.chapter_text = content["chapter_text"]
       c.next_chapter = content["next_chapter"]
       c.previous_chapter = content["previous_chapter"]
+      c.volume_id = content["volume_id"]
+      c.order_number = content["order_number"]
+
       c
     end
 
@@ -56,6 +59,8 @@ module PeasantRoad
         chapter_text: @chapter_text,
         next_chapter: @next_chapter,
         previous_chapter: @previous_chapter,
+        volume_id: @volume_id,
+        order_number: @order_number
       })
       begin
         @repository.read_chapter(@fic_id, @chapter_id)
