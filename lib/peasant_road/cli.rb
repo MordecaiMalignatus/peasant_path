@@ -51,7 +51,7 @@ module PeasantRoad
 
       fics = @config.followed_stories.map { |fic| Fic.from_disk(fic, @repo) }
       fics.each do |f|
-        puts "Pulling #{f.display_title}..."
+        puts "  Pulling #{f.display_title}..."
         f.pull
       end
     end

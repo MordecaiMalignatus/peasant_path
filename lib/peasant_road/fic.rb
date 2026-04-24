@@ -67,7 +67,6 @@ module PeasantRoad
       chapters_to_pull = chapter_toc.filter { |rr_chapter| !@chapters.include?(rr_chapter) }
       fetch_fic_info
       persist_fic_info
-      puts "#{chapters_to_pull.size} new chapters, scraping..."
 
       chapters_to_pull.each do |c|
         @chapters << @rr.enrich_overview_chapter!(c).persist
