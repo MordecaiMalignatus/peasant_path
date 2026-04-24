@@ -74,28 +74,6 @@ module PeasantRoad
       end
     end
 
-    def backfill_chapter_volumes!
-      overview = @rr.chapter_overview(@fic_id)
-      volume_data = overview.each_with_object({}) do |ch, h|
-        h[ch["id"].to_s] = { "volume_id" => ch["volumeId"], "order_number" => ch["order"] }
-      end
-
-      @chapters.each do |chapter|
-        existing = @repository.read_chapter(@fic_id, chapter.chapter_id)
-        next if existing.key?("volume_id") && existing.key?("order_number")
-
-        data = volume_data[chapter.chapter_id]
-        next unless data
-
-        updated = existing.merge(data)
-        @repository.write_chapter(@fic_id, chapter.chapter_id, JSON.pretty_generate(updated))
-        chapter.volume_id = data["volume_id"]
-        chapter.order_number = data["order_number"]
-      end
-
-      self
-    end
-
     def to_book
       pull
       Epub.new(self)
