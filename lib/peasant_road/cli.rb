@@ -56,11 +56,12 @@ module PeasantRoad
       end
     end
 
-    desc "build FIC_ID [FIC_ID...]", "Build an EPUB for one or more followed stories"
+    desc "build [FIC_ID...]", "Build an EPUB for one or more followed stories (interactive selector if no IDs given)"
 
     def build(*fic_ids)
       if fic_ids.empty?
-        raise Thor::Error, "Please provide at least one fic ID"
+        fic_ids = select_fics_with_fzf
+        return if fic_ids.empty?
       end
 
       fic_ids.each do |fid|
@@ -68,6 +69,24 @@ module PeasantRoad
         f = Fic.from_disk(fid, @repo)
         f.to_book.build_all("#{f.display_title}.epub")
       end
+    end
+
+    private
+
+    def select_fics_with_fzf
+      fics = @config.followed_stories.map { |fic_id| Fic.from_disk(fic_id, @repo) }
+      input = fics.map { |f| "#{f.display_title}\t#{f.fic_id}" }.join("\n")
+
+      output = IO.popen(["fzf", "--multi", "--with-nth=1", "--delimiter=\t"], "r+") do |io|
+        io.write(input)
+        io.close_write
+        io.read
+      end
+
+      return [] if output.nil? || output.strip.empty?
+      output.strip.split("\n").map { |line| line.split("\t", 2).last }
+    rescue Errno::ENOENT
+      raise Thor::Error, "fzf not found. Install fzf or provide fic IDs directly."
     end
   end
 end
