@@ -76,6 +76,20 @@ module PeasantRoad
       File.write(cover_image_path(fic_id), content)
     end
 
+    def pull_log_path
+      "#{@root_path}/pull_log.jsonl"
+    end
+
+    def append_pull_log(entry)
+      FileUtils.mkdir_p(@root_path)
+      File.open(pull_log_path, "a") { |f| f.puts(JSON.generate(entry)) }
+    end
+
+    def read_pull_log
+      return [] unless File.exist?(pull_log_path)
+      File.readlines(pull_log_path, chomp: true).map { |line| JSON.parse(line) }
+    end
+
     def non_chapter_files(fic_id)
       ["#{fic_dir(fic_id)}/fic_info.json", cover_image_path(fic_id)] + Dir.glob("#{fic_dir(fic_id)}/volume_*_cover.jpg")
     end

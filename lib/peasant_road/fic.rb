@@ -68,9 +68,9 @@ module PeasantRoad
       fetch_fic_info
       persist_fic_info
 
-      chapters_to_pull.each do |c|
-        @chapters << @rr.enrich_overview_chapter!(c).persist
-      end
+      new_chapters = chapters_to_pull.map { |c| @rr.enrich_overview_chapter!(c).persist }
+      @chapters.concat(new_chapters)
+      new_chapters
     end
 
     def to_book
