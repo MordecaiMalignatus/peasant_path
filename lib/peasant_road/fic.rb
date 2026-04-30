@@ -34,7 +34,6 @@ module PeasantRoad
         fic.display_name = content["display_name"]
         fic.volumes = content["volumes"] || []
       rescue Errno::ENOENT
-        puts "Fic metadata not found, retrieving..."
         fic = new(fic_id: fic_id, repository: repository)
         fic.fetch_fic_info
         fic.persist_fic_info
@@ -84,7 +83,6 @@ module PeasantRoad
       chapters = @chapters.map(&:to_slug)
       new_state = JSON.pretty_generate({ author: @author, title: @title, display_name: @display_name, description: @description, volumes: @volumes, chapters: chapters })
 
-      puts "Saving cover image..." unless File.exist?(@repository.cover_image_path(@fic_id))
       @repository.write_cover_image(@fic_id, @cover_image)
       @volume_covers&.each do |volume_id, image_data|
         @repository.write_volume_cover_image(@fic_id, volume_id, image_data)

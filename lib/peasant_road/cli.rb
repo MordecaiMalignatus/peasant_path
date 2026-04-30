@@ -49,13 +49,11 @@ module PeasantRoad
     desc "pull", "Pull new chapters for all followed stories"
 
     def pull
-      puts "Pulling all followed fics..."
-
       fics = @config.followed_stories.map { |fic| Fic.from_disk(fic, @repo) }
       log_entry = { timestamp: Time.now.iso8601, fics: [] }
+      quiet = []
 
       fics.each do |f|
-        puts "  Pulling #{f.display_title}..."
         begin
           new_chapters = f.pull
           log_entry[:fics] << {
@@ -63,7 +61,14 @@ module PeasantRoad
             title: f.display_title,
             new_chapters: new_chapters.map(&:chapter_title),
           }
+          if new_chapters.any?
+            puts f.display_title
+            new_chapters.each { |c| puts "  #{set_color("+ #{c.chapter_title}", :green, :bold)}" }
+          else
+            quiet << f.display_title
+          end
         rescue => e
+          puts f.display_title
           puts "  ERROR: #{e.message}"
           log_entry[:fics] << {
             fic_id: f.fic_id,
@@ -74,6 +79,7 @@ module PeasantRoad
         end
       end
 
+      puts "No new chapters: #{quiet.join(", ")}" unless quiet.empty?
       @repo.append_pull_log(log_entry)
     end
 

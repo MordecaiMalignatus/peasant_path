@@ -63,7 +63,6 @@ module PeasantRoad
       begin
         @repository.read_chapter(@fic_id, @chapter_id)
       rescue Errno::ENOENT
-        puts "  + #{chapter_title}"
         @repository.write_chapter(@fic_id, @chapter_id, body)
       end
 
