@@ -77,38 +77,57 @@ module PeasantRoad
       @repo.append_pull_log(log_entry)
     end
 
-    desc "report", "Show recent automated pull history"
-    option :count, type: :numeric, aliases: "-n", default: 10, desc: "Number of recent pull runs to show"
+    desc "report", "Show what's new per story over a recent time window"
+    option :hours, type: :numeric, aliases: "-h", default: 48, desc: "How many hours back to look"
 
     def report
-      entries = @repo.read_pull_log.last(options[:count])
-
-      if entries.empty?
+      all_entries = @repo.read_pull_log
+      if all_entries.empty?
         puts "No pull history found. Run 'pull' first."
         return
       end
 
-      entries.reverse_each do |entry|
-        time = Time.parse(entry["timestamp"])
-        total_new = entry["fics"].sum { |f| f["new_chapters"].length }
-        fic_count = entry["fics"].length
-        chapter_word = total_new == 1 ? "chapter" : "chapters"
-        fic_word = fic_count == 1 ? "fic" : "fics"
-        puts "#{time.strftime("%Y-%m-%d %H:%M")}  [#{fic_count} #{fic_word}, #{total_new} new #{chapter_word}]"
+      cutoff = Time.now - (options[:hours] * 3600)
+      entries = all_entries.select { |e| Time.parse(e["timestamp"]) >= cutoff }
 
+      fic_data = {}
+      entries.each do |entry|
+        time = Time.parse(entry["timestamp"])
         entry["fics"].each do |fic|
-          if fic["error"]
-            puts "  %-40s ERROR: %s" % [fic["title"], fic["error"]]
-          elsif fic["new_chapters"].empty?
-            puts "  %-40s up to date" % fic["title"]
+          fic_data[fic["fic_id"]] ||= { title: fic["title"], runs: [] }
+          fic_data[fic["fic_id"]][:runs] << {
+            time: time,
+            new_chapters: fic["new_chapters"],
+            error: fic["error"],
+          }
+        end
+      end
+
+      @config.followed_stories.each do |fic_id|
+        next if fic_data.key?(fic_id)
+        fic_data[fic_id] = { title: Fic.from_disk(fic_id, @repo).display_title, runs: [] }
+      end
+
+      sorted = fic_data.sort_by { |_, d| [-d[:runs].sum { |r| r[:new_chapters].length }, d[:title]] }
+
+      active, quiet = sorted.partition { |_, d| d[:runs].any? { |r| r[:new_chapters].any? || r[:error] } }
+
+      active.each do |_, data|
+        puts data[:title]
+        data[:runs].select { |r| r[:new_chapters].any? || r[:error] }.each do |run|
+          puts "  #{run[:time].strftime("%Y-%m-%d %H:%M")}"
+          if run[:error]
+            puts "    ERROR: #{run[:error]}"
           else
-            chapter_count = fic["new_chapters"].length
-            puts "  %-40s %d new %s" % [fic["title"], chapter_count, chapter_count == 1 ? "chapter" : "chapters"]
-            fic["new_chapters"].each { |t| puts "    + #{t}" }
+            run[:new_chapters].each { |t| puts "    + #{t}" }
           end
         end
-
         puts
+      end
+
+      unless quiet.empty?
+        puts "No new chapters:"
+        quiet.each { |_, data| puts "  - #{data[:title]}" }
       end
     end
 
