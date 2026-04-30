@@ -118,16 +118,12 @@ module PeasantRoad
           if run[:error]
             puts "  ERROR: #{run[:error]}"
           else
-            run[:new_chapters].each { |t| puts "  + #{t}" }
+            run[:new_chapters].each { |t| puts "  #{set_color("+ #{t}", :green, :bold)}" }
           end
         end
-        puts
       end
 
-      unless quiet.empty?
-        puts "No new chapters:"
-        quiet.each { |_, data| puts "  - #{data[:title]}" }
-      end
+      puts "No new chapters: #{quiet.map { |_, d| d[:title] }.join(", ")}" unless quiet.empty?
     end
 
     desc "schedule", "Install a launchd job to run pull automatically (macOS only)"
