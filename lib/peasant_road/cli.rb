@@ -115,11 +115,10 @@ module PeasantRoad
       active.each do |_, data|
         puts data[:title]
         data[:runs].select { |r| r[:new_chapters].any? || r[:error] }.each do |run|
-          puts "  #{run[:time].strftime("%Y-%m-%d %H:%M")}"
           if run[:error]
-            puts "    ERROR: #{run[:error]}"
+            puts "  ERROR: #{run[:error]}"
           else
-            run[:new_chapters].each { |t| puts "    + #{t}" }
+            run[:new_chapters].each { |t| puts "  + #{t}" }
           end
         end
         puts
