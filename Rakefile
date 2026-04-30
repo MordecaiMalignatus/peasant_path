@@ -8,6 +8,11 @@ task :build do
   sh "bundle exec peasant_road build 107917"
 end
 
+task :install do 
+  sh 'bundle exec gem build ./peasant_road.gemspec'
+  sh 'gem install ./peasant_road-0.1.0.gem'
+end
+
 task :reset do
   sh "rm -rf ~/.config/peasant_road"
   sh 'rm -f "Sky Pride.epub"'
