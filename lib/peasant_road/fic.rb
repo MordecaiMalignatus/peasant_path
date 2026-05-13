@@ -60,7 +60,8 @@ module PeasantRoad
       self
     end
 
-    def pull
+    def pull(throttle: false)
+      @rr.throttle = throttle
       @chapters = discover_chapters_on_disk
       chapter_toc = @rr.chapter_overview(@fic_id).map { |chapter_hash| Chapter.from_overview_hash(chapter_hash, @repository) }
       chapters_to_pull = chapter_toc.filter { |rr_chapter| !@chapters.include?(rr_chapter) }

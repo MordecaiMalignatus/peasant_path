@@ -47,6 +47,7 @@ module PeasantRoad
     end
 
     desc "pull", "Pull new chapters for all followed stories"
+    option :throttle, type: :boolean, default: false, desc: "Add 5-15s random delay between chapter downloads to avoid rate limiting"
 
     def pull
       fics = @config.followed_stories.map { |fic| Fic.from_disk(fic, @repo) }
@@ -55,7 +56,7 @@ module PeasantRoad
 
       fics.each do |f|
         begin
-          new_chapters = f.pull
+          new_chapters = f.pull(throttle: options[:throttle])
           log_entry[:fics] << {
             fic_id: f.fic_id,
             title: f.display_title,
@@ -155,6 +156,7 @@ module PeasantRoad
             <string>#{ruby_path}</string>
             <string>#{script_path}</string>
             <string>pull</string>
+            <string>--throttle</string>
           </array>
           <key>StartInterval</key>
           <integer>#{interval_seconds}</integer>

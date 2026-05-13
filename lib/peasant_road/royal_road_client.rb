@@ -6,8 +6,11 @@ module PeasantRoad
     include HTTParty
     base_uri "www.royalroad.com"
 
+    attr_writer :throttle
+
     def initialize
       @options = { query: {} }
+      @throttle = false
     end
 
     def fic_info(uri)
@@ -59,6 +62,7 @@ module PeasantRoad
     def enrich_overview_chapter!(overview_chapter)
       raise if overview_chapter.uri.nil?
 
+      sleep(rand(5..15)) if @throttle
       resp = self.class.get(overview_chapter.uri)
       doc = Nokogiri::HTML(resp.body)
       nav_buttons = doc.css(".nav-buttons").css(".btn")
