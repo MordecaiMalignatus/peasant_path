@@ -49,6 +49,19 @@ module PeasantRoad
     # Host header rather than locking to a single name.
     set :host_authorization, { permitted_hosts: [] }
 
+    # Start the in-process auto-pull loop, unless systemd's timer is driving it
+    # (or it's disabled). Call once at boot, before run!.
+    def self.start_scheduler!
+      return unless Scheduler.mode == :internal
+
+      hours = Integer(ENV.fetch("PEASANT_ROAD_INTERVAL_HOURS", Scheduler::DEFAULT_INTERVAL_HOURS.to_s))
+      Scheduler.new(
+        library: settings.library,
+        jobs: settings.jobs,
+        interval_seconds: hours * 3600,
+      ).start
+    end
+
     helpers do
       def library
         settings.library

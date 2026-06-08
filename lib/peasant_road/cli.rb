@@ -1,6 +1,7 @@
 require "uri"
 require "rbconfig"
 require "time"
+require "fileutils"
 require "thor"
 
 module PeasantRoad
@@ -40,23 +41,14 @@ module PeasantRoad
     option :throttle, type: :boolean, default: false, desc: "Add 5-15s random delay between chapter downloads to avoid rate limiting"
 
     def pull
-      results = @library.pull_all(throttle: options[:throttle])
-      quiet = []
+      render_pull_results(@library.pull_all(throttle: options[:throttle]))
+    end
 
-      results.each do |r|
-        f = r[:fic]
-        if r[:error]
-          puts f.display_title
-          puts "  ERROR: #{r[:error]}"
-        elsif r[:new_chapters].any?
-          puts f.display_title
-          r[:new_chapters].each { |c| puts "  #{set_color("+ #{c.chapter_title}", :green, :bold)}" }
-        else
-          quiet << f.display_title
-        end
-      end
+    desc "refresh", "Pull new chapters and rebuild the stories that changed"
+    option :throttle, type: :boolean, default: false, desc: "Add 5-15s random delay between chapter downloads to avoid rate limiting"
 
-      puts "No new chapters: #{quiet.join(", ")}" unless quiet.empty?
+    def refresh
+      render_pull_results(@library.refresh(throttle: options[:throttle]))
     end
 
     desc "report", "Show what's new per story over a recent time window"
@@ -108,7 +100,7 @@ module PeasantRoad
       puts "No new chapters: #{quiet.map { |_, d| d[:title] }.join(", ")}" unless quiet.empty?
     end
 
-    desc "schedule", "Install a launchd job to run pull automatically (macOS only)"
+    desc "schedule", "Install a launchd job to refresh (pull + rebuild) automatically (macOS only)"
     option :interval, type: :numeric, aliases: "-i", default: 6, desc: "Pull interval in hours"
 
     def schedule
@@ -130,7 +122,7 @@ module PeasantRoad
           <array>
             <string>#{ruby_path}</string>
             <string>#{script_path}</string>
-            <string>pull</string>
+            <string>refresh</string>
             <string>--throttle</string>
           </array>
           <key>StartInterval</key>
@@ -160,6 +152,7 @@ module PeasantRoad
       require "peasant_road/web"
       Web.set(:bind, options[:bind])
       Web.set(:port, options[:port])
+      Web.start_scheduler!
       Web.run!
     end
 
@@ -179,7 +172,55 @@ module PeasantRoad
       end
     end
 
+    desc "install", "Install systemd --user units for the web server and auto-pull timer (Linux)"
+    option :interval, type: :numeric, aliases: "-i", default: Scheduler::DEFAULT_INTERVAL_HOURS, desc: "Pull interval in hours"
+    option :port, type: :numeric, default: 4567, desc: "Port the web server binds"
+    option :bind, type: :string, default: "127.0.0.1", desc: "Address the web server binds"
+
+    def install
+      ruby_path = RbConfig.ruby
+      script_path = File.expand_path($PROGRAM_NAME)
+      unit_dir = File.expand_path("~/.config/systemd/user")
+
+      units = Scheduler.systemd_units(
+        exec_serve: "#{ruby_path} #{script_path} serve --bind #{options[:bind]} --port #{options[:port]}",
+        exec_pull: "#{ruby_path} #{script_path} refresh --throttle",
+        interval_hours: options[:interval],
+      )
+
+      FileUtils.mkdir_p(unit_dir)
+      units.each do |filename, content|
+        File.write("#{unit_dir}/#{filename}", content)
+        puts "Wrote #{unit_dir}/#{filename}"
+      end
+
+      puts ""
+      puts "Enable and start with:"
+      puts "  systemctl --user daemon-reload"
+      puts "  systemctl --user enable --now peasant-road-web.service peasant-road-pull.timer"
+      puts "  loginctl enable-linger #{ENV["USER"]}   # keep user units running without an active login"
+    end
+
     private
+
+    def render_pull_results(results)
+      quiet = []
+
+      results.each do |r|
+        f = r[:fic]
+        if r[:error]
+          puts f.display_title
+          puts "  ERROR: #{r[:error]}"
+        elsif r[:new_chapters].any?
+          puts f.display_title
+          r[:new_chapters].each { |c| puts "  #{set_color("+ #{c.chapter_title}", :green, :bold)}" }
+        else
+          quiet << f.display_title
+        end
+      end
+
+      puts "No new chapters: #{quiet.join(", ")}" unless quiet.empty?
+    end
 
     def select_fics_with_fzf
       fics = @config.followed_stories.map { |fic_id| Fic.from_disk(fic_id, @repo) }
