@@ -150,7 +150,9 @@ module PeasantPath
             app_logger.info("#{fic.display_title}: #{new_chapters.size} new chapter(s)")
             library.rebuild(fic)
           end
-          flash! "Now following #{fic.display_title}. Downloading and building…"
+          # The title isn't fetched until the background pull runs, so fall back
+          # to the user-supplied name (or a generic phrase) for the flash.
+          flash! "Now following #{fic.display_title || "the story"}. Downloading and building…"
         else
           flash! "Already following that story."
         end

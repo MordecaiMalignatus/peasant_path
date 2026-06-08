@@ -47,13 +47,17 @@ RSpec.describe PeasantPath::Library do
       expect { library.follow("https://www.royalroad.com/") }.to raise_error(PeasantPath::Library::InvalidURL)
     end
 
-    it "registers a new story and persists its info" do
+    it "registers a new story with a minimal record and no network" do
+      expect(mock_rr).not_to receive(:fic_info)
       result = library.follow(url)
 
       expect(result[:followed]).to be true
       expect(result[:fic_id]).to eq fic_id
       expect(library.config.followed_stories).to include(fic_id)
-      expect(repo.read_fic_info(fic_id)["title"]).to eq "Sky Pride"
+      # The metadata is fetched later by the background pull, so the record
+      # exists but the scraped title isn't populated yet.
+      expect(repo.read_fic_info(fic_id)).to have_key("title")
+      expect(repo.read_fic_info(fic_id)["title"]).to be_nil
     end
 
     it "passes the display name through" do
@@ -127,7 +131,15 @@ RSpec.describe PeasantPath::Library do
   end
 
   describe "#rename" do
-    before { library.follow(url) }
+    # follow no longer fetches metadata, so simulate the post-pull state where
+    # the scraped title and volumes are already persisted on disk.
+    before do
+      library.follow(url)
+      info = repo.read_fic_info(fic_id)
+      info["title"] = "Sky Pride"
+      info["volumes"] = [{ "id" => 10395, "title" => "Volume 1" }]
+      repo.write_fic_info(fic_id, JSON.pretty_generate(info))
+    end
 
     it "sets the display name while preserving the scraped info" do
       fic = library.rename(fic_id, "New Title")

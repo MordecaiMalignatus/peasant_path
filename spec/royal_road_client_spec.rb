@@ -138,6 +138,27 @@ RSpec.describe PeasantPath::RoyalRoadClient do
     end
   end
 
+  describe "scraping guard rails" do
+    it "raises a named ScrapeError when window.volumes is missing from fic_info" do
+      allow(PeasantPath::RoyalRoadClient).to receive(:get).and_return(double(body: "<html>rate limited</html>"))
+      allow(client).to receive(:download_picture).and_return("x")
+
+      expect {
+        client.fic_info("/fiction/107917/sky-pride")
+      }.to raise_error(PeasantPath::RoyalRoadClient::ScrapeError, /window\.volumes/)
+    end
+
+    it "raises a named ScrapeError when window.chapters is missing from chapter_overview" do
+      allow(PeasantPath::RoyalRoadClient).to receive(:get).with("/fiction/107917/").and_return(
+        double(body: "<html>error page</html>")
+      )
+
+      expect {
+        client.chapter_overview(107917)
+      }.to raise_error(PeasantPath::RoyalRoadClient::ScrapeError, /fiction 107917.*window\.chapters/m)
+    end
+  end
+
   describe "#download_picture" do
     it "downloads image data successfully" do
       mock_response = double(code: 200, body: "fake_image_data")

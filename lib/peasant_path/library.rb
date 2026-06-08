@@ -39,9 +39,13 @@ module PeasantPath
       return { fic_id: fic_id, followed: false } if cfg.followed_stories.include?(fic_id)
 
       cfg.followed_stories << fic_id
+      # Register the follow with no network: write a minimal record so the story
+      # shows up immediately, and leave the metadata, covers and chapters to the
+      # background pull the caller queues. Otherwise the "fast" follow action
+      # would block the web request on several CDN cover downloads.
       fic = Fic.new(fic_id: fic_id, repository: @repo)
       fic.display_name = name
-      fic.fetch_fic_info.persist_fic_info
+      fic.persist_fic_info
       @repo.write_config_file(cfg.to_json)
 
       { fic_id: fic_id, followed: true, fic: fic }

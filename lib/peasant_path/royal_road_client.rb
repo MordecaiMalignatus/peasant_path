@@ -6,6 +6,12 @@ module PeasantPath
     include HTTParty
     base_uri "www.royalroad.com"
 
+    # Raised when the page doesn't contain the JS state we scrape — RoyalRoad
+    # changed its markup, served an error page, or rate-limited us. Carries the
+    # fic and the missing data so an operator sees something actionable instead
+    # of a bare `NoMethodError: undefined method 'strip' for nil`.
+    class ScrapeError < StandardError; end
+
     # A hung connection must never block the pull thread forever: because Jobs
     # serializes work, one stuck socket would leave the web UI's buttons
     # disabled until restart. Cap open and read time so a slow request fails and
@@ -23,15 +29,15 @@ module PeasantPath
     def fic_info(uri)
       toc = self.class.get(uri)
       doc = Nokogiri::HTML(toc.body)
-      cover_image_url = doc.css(".fic-header").css("img").attribute("src").value
-      volumes_json = toc.body
-        .lines
-        .find { |line| /window\.volumes =/.match line }
-        .strip
-        .delete_prefix("window.volumes = ")
-        .delete_suffix(";")
-
+      volumes_json = extract_js_assignment(toc.body, "window.volumes", context: uri)
       volumes = JSON.load(volumes_json)
+
+      cover_attr = doc.css(".fic-header").css("img").attribute("src")
+      if cover_attr.nil?
+        raise ScrapeError, "#{uri}: could not find the cover image in the page " \
+          "(RoyalRoad markup may have changed, or an error/rate-limit page was served)"
+      end
+      cover_image_url = cover_attr.value
       volume_covers = volumes.each_with_object({}) do |vol, h|
         h[vol["id"]] = download_picture(vol["cover"])
       end
@@ -56,12 +62,7 @@ module PeasantPath
       # this via JS would require running a puppeteered browser, but luckily
       # there is exactly one assignment to state done statically, and we can nab
       # it via string manipulation :v
-      extracted_json = toc.body
-        .lines
-        .find { |line| /window\.chapters =/.match line }
-        .strip
-        .delete_prefix("window.chapters = ")
-        .delete_suffix(";")
+      extracted_json = extract_js_assignment(toc.body, "window.chapters", context: "fiction #{id}")
 
       JSON.load(extracted_json)
     end
@@ -93,6 +94,21 @@ module PeasantPath
         raise "cover_image: got unexpected response code from the CDN: #{resp.inspect}"
       end
       resp.body
+    end
+
+    private
+
+    # Pull the value out of a static `<var> = ...;` JS assignment in the page
+    # body. Raises ScrapeError naming the fic and the missing variable when the
+    # line is absent, rather than letting a nil .strip blow up three calls deep.
+    def extract_js_assignment(body, var_name, context:)
+      line = body.lines.find { |l| /#{Regexp.escape(var_name)} =/.match(l) }
+      if line.nil?
+        raise ScrapeError, "#{context}: could not find `#{var_name}` in the page " \
+          "(RoyalRoad markup may have changed, or an error/rate-limit page was served)"
+      end
+
+      line.strip.delete_prefix("#{var_name} = ").delete_suffix(";")
     end
   end
 end

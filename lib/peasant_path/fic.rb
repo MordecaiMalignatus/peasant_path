@@ -6,7 +6,7 @@ module PeasantPath
     FIC_ID_REGEX = /https:\/\/www\.royalroad\.com\/fiction\/(\d+)\//
 
     attr_accessor :title, :uri, :author, :chapters, :description, :display_name, :volumes
-    attr_reader :rr, :fic_id, :repository
+    attr_reader :fic_id, :repository
 
     def initialize(fic_id:, repository:)
       @repository = repository
@@ -17,7 +17,13 @@ module PeasantPath
       @author = nil
       @display_name = nil
       @volumes = []
-      @rr = RoyalRoadClient.new
+    end
+
+    # The scraper client is built lazily and only when a fic actually pulls.
+    # Disk-loaded fics used purely for display (the web index, download
+    # filenames) touch no network and so never construct an HTTP client.
+    def rr
+      @rr ||= RoyalRoadClient.new
     end
 
     def display_title
@@ -49,7 +55,7 @@ module PeasantPath
     end
 
     def fetch_fic_info
-      info = @rr.fic_info(@uri.to_s)
+      info = rr.fic_info(@uri.to_s)
       @author = info[:author]
       @title = info[:title]
       @cover_image = info[:cover_image]
@@ -61,14 +67,14 @@ module PeasantPath
     end
 
     def pull(throttle: false)
-      @rr.throttle = throttle
+      rr.throttle = throttle
       @chapters = discover_chapters_on_disk
-      chapter_toc = @rr.chapter_overview(@fic_id).map { |chapter_hash| Chapter.from_overview_hash(chapter_hash, @repository) }
+      chapter_toc = rr.chapter_overview(@fic_id).map { |chapter_hash| Chapter.from_overview_hash(chapter_hash, @repository) }
       chapters_to_pull = chapter_toc.filter { |rr_chapter| !@chapters.include?(rr_chapter) }
       fetch_fic_info
       persist_fic_info
 
-      new_chapters = chapters_to_pull.map { |c| @rr.enrich_overview_chapter!(c).persist }
+      new_chapters = chapters_to_pull.map { |c| rr.enrich_overview_chapter!(c).persist }
       @chapters.concat(new_chapters)
       new_chapters
     end
@@ -81,15 +87,21 @@ module PeasantPath
 
     # The RR fic ID found in the URL is considered the canon identifier of a fic,
     # after that, title and author and description are all mutable.
+    #
+    # Cover bytes are only written when we actually have them (i.e. after a
+    # fresh #fetch_fic_info). A fic loaded via #from_disk carries nil covers, so
+    # persisting one must never overwrite the existing cover files with empty
+    # data — only the metadata JSON is rewritten in that case.
     def persist_fic_info
       chapters = @chapters.map(&:to_slug)
       new_state = JSON.pretty_generate({ author: @author, title: @title, display_name: @display_name, description: @description, volumes: @volumes, chapters: chapters })
 
-      @repository.write_cover_image(@fic_id, @cover_image)
+      @repository.write_fic_info(@fic_id, new_state)
+
+      @repository.write_cover_image(@fic_id, @cover_image) if @cover_image
       @volume_covers&.each do |volume_id, image_data|
         @repository.write_volume_cover_image(@fic_id, volume_id, image_data)
       end
-      @repository.write_fic_info(@fic_id, new_state)
     end
 
     # Returns the fic ID embedded in a RoyalRoad story URL, or nil if the URL
