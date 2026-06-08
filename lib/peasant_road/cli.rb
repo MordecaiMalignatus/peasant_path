@@ -11,8 +11,8 @@ module PeasantRoad
 
     def initialize(*args)
       super
-      @rr = RoyalRoadClient.new
       @repo = DiskRepository.new("#{Dir.home}/.config/peasant_road")
+      @library = Library.new(repo: @repo)
       @config = Config.from_config_file(@repo.read_config_file)
     end
 
@@ -25,63 +25,38 @@ module PeasantRoad
       end
 
       urls.each do |url|
-        uri = URI(url)
-        unless uri.host == "www.royalroad.com"
-          raise Thor::Error, "'#{url}' is not a RoyalRoad URL"
-        end
-
-        fic_id = Fic.uri_to_fic_id(uri.to_s)
-
-        unless @config.followed_stories.include?(fic_id)
-          @config.followed_stories << fic_id
-          fic = Fic.new(fic_id: fic_id, repository: @repo)
-          fic.display_name = options[:name]
-          fic.fetch_fic_info.persist_fic_info
-          puts "Followed #{fic.display_title}"
+        result = @library.follow(url, name: options[:name])
+        if result[:followed]
+          puts "Followed #{result[:fic].display_title}"
         else
           puts "Already following this fic, skipping."
         end
       end
-
-      @repo.write_config_file(@config.to_json)
+    rescue Library::InvalidURL => e
+      raise Thor::Error, e.message
     end
 
     desc "pull", "Pull new chapters for all followed stories"
     option :throttle, type: :boolean, default: false, desc: "Add 5-15s random delay between chapter downloads to avoid rate limiting"
 
     def pull
-      fics = @config.followed_stories.map { |fic| Fic.from_disk(fic, @repo) }
-      log_entry = { timestamp: Time.now.iso8601, fics: [] }
+      results = @library.pull_all(throttle: options[:throttle])
       quiet = []
 
-      fics.each do |f|
-        begin
-          new_chapters = f.pull(throttle: options[:throttle])
-          log_entry[:fics] << {
-            fic_id: f.fic_id,
-            title: f.display_title,
-            new_chapters: new_chapters.map(&:chapter_title),
-          }
-          if new_chapters.any?
-            puts f.display_title
-            new_chapters.each { |c| puts "  #{set_color("+ #{c.chapter_title}", :green, :bold)}" }
-          else
-            quiet << f.display_title
-          end
-        rescue => e
+      results.each do |r|
+        f = r[:fic]
+        if r[:error]
           puts f.display_title
-          puts "  ERROR: #{e.message}"
-          log_entry[:fics] << {
-            fic_id: f.fic_id,
-            title: f.display_title,
-            new_chapters: [],
-            error: e.message,
-          }
+          puts "  ERROR: #{r[:error]}"
+        elsif r[:new_chapters].any?
+          puts f.display_title
+          r[:new_chapters].each { |c| puts "  #{set_color("+ #{c.chapter_title}", :green, :bold)}" }
+        else
+          quiet << f.display_title
         end
       end
 
       puts "No new chapters: #{quiet.join(", ")}" unless quiet.empty?
-      @repo.append_pull_log(log_entry)
     end
 
     desc "report", "Show what's new per story over a recent time window"
