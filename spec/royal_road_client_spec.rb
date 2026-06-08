@@ -141,7 +141,7 @@ RSpec.describe PeasantPath::RoyalRoadClient do
   describe "#download_picture" do
     it "downloads image data successfully" do
       mock_response = double(code: 200, body: "fake_image_data")
-      allow(HTTParty).to receive(:get).with("https://example.com/image.jpg").and_return(mock_response)
+      allow(HTTParty).to receive(:get).with("https://example.com/image.jpg", anything).and_return(mock_response)
 
       result = client.download_picture("https://example.com/image.jpg")
       expect(result).to eq "fake_image_data"
@@ -149,7 +149,7 @@ RSpec.describe PeasantPath::RoyalRoadClient do
 
     it "raises an error on non-200 response" do
       mock_response = double(code: 404, inspect: "404 Not Found")
-      allow(HTTParty).to receive(:get).with("https://example.com/missing.jpg").and_return(mock_response)
+      allow(HTTParty).to receive(:get).with("https://example.com/missing.jpg", anything).and_return(mock_response)
 
       expect {
         client.download_picture("https://example.com/missing.jpg")

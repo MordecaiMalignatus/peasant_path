@@ -6,10 +6,17 @@ module PeasantPath
     include HTTParty
     base_uri "www.royalroad.com"
 
+    # A hung connection must never block the pull thread forever: because Jobs
+    # serializes work, one stuck socket would leave the web UI's buttons
+    # disabled until restart. Cap open and read time so a slow request fails and
+    # gets retried on the next pull instead of wedging the daemon.
+    HTTP_TIMEOUT_SECONDS = 30
+    open_timeout HTTP_TIMEOUT_SECONDS
+    read_timeout HTTP_TIMEOUT_SECONDS
+
     attr_writer :throttle
 
     def initialize
-      @options = { query: {} }
       @throttle = false
     end
 
@@ -81,7 +88,7 @@ module PeasantPath
     end
 
     def download_picture(url)
-      resp = HTTParty.get(url)
+      resp = HTTParty.get(url, open_timeout: HTTP_TIMEOUT_SECONDS, read_timeout: HTTP_TIMEOUT_SECONDS)
       if resp.code != 200
         raise "cover_image: got unexpected response code from the CDN: #{resp.inspect}"
       end

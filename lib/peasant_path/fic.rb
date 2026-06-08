@@ -92,8 +92,11 @@ module PeasantPath
       @repository.write_fic_info(@fic_id, new_state)
     end
 
+    # Returns the fic ID embedded in a RoyalRoad story URL, or nil if the URL
+    # doesn't contain a /fiction/<id>/ path. Callers that require a story URL
+    # should treat nil as "not a story URL".
     def self.uri_to_fic_id(uri)
-      FIC_ID_REGEX.match(uri)[1]
+      FIC_ID_REGEX.match(uri)&.[](1)
     end
   end
 end

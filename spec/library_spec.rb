@@ -39,6 +39,14 @@ RSpec.describe PeasantPath::Library do
       expect { library.follow("https://example.com/fiction/1/") }.to raise_error(PeasantPath::Library::InvalidURL)
     end
 
+    it "raises InvalidURL (not URI::InvalidURIError) for a malformed URL" do
+      expect { library.follow("http://[bad") }.to raise_error(PeasantPath::Library::InvalidURL)
+    end
+
+    it "raises InvalidURL for a RoyalRoad URL with no fiction path" do
+      expect { library.follow("https://www.royalroad.com/") }.to raise_error(PeasantPath::Library::InvalidURL)
+    end
+
     it "registers a new story and persists its info" do
       result = library.follow(url)
 

@@ -34,12 +34,7 @@ module PeasantPath
     #   { fic_id:, followed: true,  fic: <Fic> }  when newly followed
     #   { fic_id:, followed: false }              when already followed
     def follow(url, name: nil)
-      uri = URI(url)
-      unless uri.host == "www.royalroad.com"
-        raise InvalidURL, "'#{url}' is not a RoyalRoad URL"
-      end
-
-      fic_id = Fic.uri_to_fic_id(uri.to_s)
+      fic_id = validate_story_url(url)
       cfg = config
       return { fic_id: fic_id, followed: false } if cfg.followed_stories.include?(fic_id)
 
@@ -136,6 +131,29 @@ module PeasantPath
       results = pull_all(throttle: throttle)
       rebuild_changed(results)
       results
+    end
+
+    private
+
+    # Validate that +url+ is a RoyalRoad story URL and return its fic ID.
+    # Every "this isn't a story URL" case — a malformed string, a non-RoyalRoad
+    # host, or a RoyalRoad URL without a /fiction/<id>/ path — raises InvalidURL
+    # so front-ends have a single error type to rescue.
+    def validate_story_url(url)
+      begin
+        uri = URI(url)
+      rescue URI::InvalidURIError
+        raise InvalidURL, "'#{url}' is not a valid URL"
+      end
+
+      unless uri.host == "www.royalroad.com"
+        raise InvalidURL, "'#{url}' is not a RoyalRoad URL"
+      end
+
+      fic_id = Fic.uri_to_fic_id(uri.to_s)
+      raise InvalidURL, "'#{url}' is not a RoyalRoad story URL" if fic_id.nil?
+
+      fic_id
     end
   end
 end
