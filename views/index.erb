@@ -27,8 +27,8 @@
       <div class="downloads">
         <% if row[:full_available] %>
           <a href="/download/<%= row[:fic].fic_id %>">Download (complete)</a>
-          <% row[:volumes].each do |vol| %>
-            <a href="/download/<%= row[:fic].fic_id %>/volume/<%= vol[:id] %>"><%= vol[:title] %></a>
+          <% row[:volumes].each_with_index do |vol, i| %>
+            <div class="volume"><span class="branch"><%= i == row[:volumes].size - 1 ? "└" : "├" %></span><a href="/download/<%= row[:fic].fic_id %>/volume/<%= vol[:id] %>"><%= vol[:title] %></a></div>
           <% end %>
         <% else %>
           <span class="pending">build pending</span>
