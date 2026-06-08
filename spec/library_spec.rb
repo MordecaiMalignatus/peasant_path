@@ -98,4 +98,42 @@ RSpec.describe PeasantRoad::Library do
       expect(results.first[:new_chapters]).to be_empty
     end
   end
+
+  describe "#rebuild_changed" do
+    it "rebuilds only the fics that gained chapters, into the build directory" do
+      changed = instance_double(PeasantRoad::Fic, fic_id: "1")
+      unchanged = instance_double(PeasantRoad::Fic, fic_id: "2")
+      changed_book = instance_double(PeasantRoad::Epub)
+      allow(changed).to receive(:book).and_return(changed_book)
+      allow(changed_book).to receive(:build_all)
+      allow(unchanged).to receive(:book)
+
+      library.rebuild_changed([
+        { fic: changed, new_chapters: [double("Chapter")], error: nil },
+        { fic: unchanged, new_chapters: [], error: nil },
+      ])
+
+      expect(changed_book).to have_received(:build_all).with(repo.build_dir("1"))
+      expect(unchanged).not_to have_received(:book)
+    end
+  end
+
+  describe "#refresh" do
+    before do
+      allow(mock_rr).to receive(:throttle=)
+      allow(mock_rr).to receive(:chapter_overview).with(fic_id).and_return(overview)
+      allow(mock_rr).to receive(:enrich_overview_chapter!) do |chapter|
+        chapter.chapter_text = "<p>text</p>"
+        chapter.chapter_title = "Title #{chapter.chapter_id}"
+        chapter
+      end
+      library.follow(url)
+    end
+
+    it "pulls and then rebuilds the fic that changed" do
+      allow(library).to receive(:rebuild)
+      library.refresh
+      expect(library).to have_received(:rebuild).once
+    end
+  end
 end

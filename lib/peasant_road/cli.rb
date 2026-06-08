@@ -163,7 +163,8 @@ module PeasantRoad
       fic_ids.each do |fid|
         puts "Building EPUB for fic ID #{fid}..."
         f = Fic.from_disk(fid, @repo)
-        f.to_book.build_all("#{f.display_title}.epub")
+        f.pull
+        f.book.build_all(Dir.pwd)
       end
     end
 

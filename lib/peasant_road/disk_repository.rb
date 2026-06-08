@@ -90,6 +90,21 @@ module PeasantRoad
       File.readlines(pull_log_path, chomp: true).map { |line| JSON.parse(line) }
     end
 
+    # Built EPUBs live under a top-level "builds/<fic_id>/" directory, kept
+    # separate from the fic directory so they're never mistaken for chapters by
+    # #list_chapters.
+    def build_dir(fic_id)
+      "#{@root_path}/builds/#{fic_id}"
+    end
+
+    def epub_path(fic_id, filename)
+      "#{build_dir(fic_id)}/#{filename}"
+    end
+
+    def list_builds(fic_id)
+      Dir.glob("#{build_dir(fic_id)}/*.epub").sort
+    end
+
     def non_chapter_files(fic_id)
       ["#{fic_dir(fic_id)}/fic_info.json", cover_image_path(fic_id)] + Dir.glob("#{fic_dir(fic_id)}/volume_*_cover.jpg")
     end

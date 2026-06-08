@@ -57,4 +57,32 @@ RSpec.describe PeasantRoad::DiskRepository do
       expect(result).to include("#{tmpdir}/#{fic_id}/2113560")
     end
   end
+
+  describe "build storage" do
+    it "keeps builds outside the fic directory so they aren't seen as chapters" do
+      FileUtils.mkdir_p("#{tmpdir}/#{fic_id}")
+      File.write("#{tmpdir}/#{fic_id}/2113501", "{}")
+      FileUtils.mkdir_p(repo.build_dir(fic_id))
+      File.write(repo.epub_path(fic_id, "Sky Pride.epub"), "epub")
+
+      expect(repo.build_dir(fic_id)).not_to start_with("#{tmpdir}/#{fic_id}/")
+      expect(repo.list_chapters(fic_id)).to eq(["#{tmpdir}/#{fic_id}/2113501"])
+    end
+
+    it "lists only .epub files in the build directory" do
+      FileUtils.mkdir_p(repo.build_dir(fic_id))
+      File.write(repo.epub_path(fic_id, "Sky Pride.epub"), "epub")
+      File.write(repo.epub_path(fic_id, "Sky Pride - Vol 1.epub"), "epub")
+      File.write(repo.epub_path(fic_id, "Sky Pride.epub.tmp"), "partial")
+
+      expect(repo.list_builds(fic_id)).to contain_exactly(
+        repo.epub_path(fic_id, "Sky Pride.epub"),
+        repo.epub_path(fic_id, "Sky Pride - Vol 1.epub")
+      )
+    end
+
+    it "returns an empty list when no builds exist" do
+      expect(repo.list_builds(fic_id)).to eq([])
+    end
+  end
 end

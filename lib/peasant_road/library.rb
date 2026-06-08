@@ -77,5 +77,25 @@ module PeasantRoad
       @repo.append_pull_log(log_entry)
       results
     end
+
+    # Rebuild the combined and per-volume EPUBs for a fic into the repo's build
+    # directory. Assumes the fic's chapters are already on disk (no pull).
+    def rebuild(fic)
+      fic.book.build_all(@repo.build_dir(fic.fic_id))
+    end
+
+    # Given pull_all results, rebuild only the fics that gained chapters.
+    def rebuild_changed(results)
+      results.each { |r| rebuild(r[:fic]) if r[:new_chapters].any? }
+    end
+
+    # Pull every followed story and rebuild the ones that changed. The single
+    # entry point used by both the systemd refresh job and the in-process
+    # fallback scheduler. Returns the pull_all results.
+    def refresh(throttle: false)
+      results = pull_all(throttle: throttle)
+      rebuild_changed(results)
+      results
+    end
   end
 end

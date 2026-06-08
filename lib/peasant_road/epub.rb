@@ -1,4 +1,5 @@
 require "json"
+require "fileutils"
 require "gepub"
 require "nokogiri"
 
@@ -12,31 +13,33 @@ module PeasantRoad
       @fic = fic
     end
 
-    def build(target_path)
-      Epub.compile(
+    # Build the combined EPUB into +dir+ (defaults to the current working
+    # directory, preserving the CLI's behaviour). Returns the written path.
+    def build(dir = Dir.pwd)
+      generate(dir, "#{@fic.display_title}.epub", Epub.compile(
         title: @fic.display_title,
         author: @fic.author,
         cover_path: @fic.repository.cover_image_path(@fic.fic_id),
         chapters: @fic.chapters,
-        identifier: "https://www.royalroad.com/fiction/#{@fic.fic_id}/"
-      ).generate_epub(target_path)
+        identifier: "https://www.royalroad.com/fiction/#{@fic.fic_id}/",
+      ))
     end
 
-    def build_all(combined_path)
-      build(combined_path)
-      build_volumes
+    def build_all(dir = Dir.pwd)
+      build(dir)
+      build_volumes(dir)
     end
 
-    def build_volumes
+    def build_volumes(dir = Dir.pwd)
       non_stub_volumes.each do |vol|
-        vol_title = "#{@fic.display_title} - #{vol['title']}"
-        Epub.compile(
+        vol_title = "#{@fic.display_title} - #{vol["title"]}"
+        generate(dir, "#{vol_title}.epub", Epub.compile(
           title: vol_title,
           author: @fic.author,
           cover_path: volume_cover_path(vol["id"]),
           chapters: chapters_for_volume(vol),
-          identifier: "https://www.royalroad.com/fiction/#{@fic.fic_id}/#volume-#{vol['id']}"
-        ).generate_epub("#{vol_title}.epub")
+          identifier: "https://www.royalroad.com/fiction/#{@fic.fic_id}/#volume-#{vol["id"]}",
+        ))
       end
     end
 
@@ -91,6 +94,17 @@ module PeasantRoad
     end
 
     private
+
+    # Generate the EPUB to a temp file then atomically rename it into place, so
+    # a concurrent download never observes a half-written file. Returns the path.
+    def generate(dir, filename, book)
+      FileUtils.mkdir_p(dir)
+      final = File.join(dir, filename)
+      tmp = "#{final}.tmp"
+      book.generate_epub(tmp)
+      File.rename(tmp, final)
+      final
+    end
 
     def non_stub_volumes
       @fic.volumes.select { |vol| chapters_for_volume(vol).size >= STUB_VOLUME_THRESHOLD }

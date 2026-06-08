@@ -73,8 +73,9 @@ module PeasantRoad
       new_chapters
     end
 
-    def to_book
-      pull
+    # Build from the chapters currently on disk. Does not pull; callers that
+    # want fresh chapters should #pull first.
+    def book
       Epub.new(self)
     end
 
