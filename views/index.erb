@@ -1,0 +1,39 @@
+<p class="muted">
+  <% if @last_pull %>Last pull: <%= @last_pull %>.<% else %>No pulls yet.<% end %>
+  <% if @busy %> &middot; a pull is running…<% end %>
+</p>
+
+<form action="/pull" method="post">
+  <button type="submit"<%= " disabled" if @busy %>>Pull now</button>
+</form>
+
+<div class="add">
+  <form action="/follow" method="post">
+    <input type="url" name="url" placeholder="https://www.royalroad.com/fiction/…" size="40" required>
+    <input type="text" name="name" placeholder="Display name (optional)">
+    <button type="submit">Follow</button>
+  </form>
+</div>
+
+<% if @stories.empty? %>
+  <p>No stories followed yet. Add one above.</p>
+<% else %>
+  <% @stories.each do |row| %>
+    <div class="story">
+      <h3><%= row[:fic].display_title %></h3>
+      <div class="muted">
+        <%= row[:fic].author %> &middot; <%= row[:chapter_count] %> chapters
+      </div>
+      <div class="downloads">
+        <% if row[:full_available] %>
+          <a href="/download/<%= row[:fic].fic_id %>">Download (complete)</a>
+          <% row[:volumes].each do |vol| %>
+            <a href="/download/<%= row[:fic].fic_id %>/volume/<%= vol[:id] %>"><%= vol[:title] %></a>
+          <% end %>
+        <% else %>
+          <span class="pending">build pending</span>
+        <% end %>
+      </div>
+    </div>
+  <% end %>
+<% end %>

@@ -1,0 +1,28 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Peasant Road</title>
+  <style>
+    :root { color-scheme: light dark; }
+    body { font-family: system-ui, sans-serif; max-width: 52rem; margin: 2rem auto; padding: 0 1rem; line-height: 1.5; }
+    h1 { margin-bottom: 0.25rem; }
+    .muted { color: #888; font-size: 0.9rem; }
+    .flash { background: #eef; border: 1px solid #99c; padding: 0.5rem 0.75rem; border-radius: 0.4rem; margin: 1rem 0; }
+    form.inline { display: inline; }
+    .story { border-top: 1px solid #ccc; padding: 0.75rem 0; }
+    .story h3 { margin: 0 0 0.25rem; }
+    .downloads a { margin-right: 0.75rem; }
+    .add { margin: 1.5rem 0; padding: 1rem; border: 1px solid #ccc; border-radius: 0.5rem; }
+    .add input[type=text], .add input[type=url] { padding: 0.3rem; margin-right: 0.5rem; }
+    button { padding: 0.35rem 0.75rem; cursor: pointer; }
+    .pending { color: #b80; }
+  </style>
+</head>
+<body>
+  <h1>Peasant Road</h1>
+  <% if @flash %><div class="flash"><%= @flash %></div><% end %>
+  <%= yield %>
+</body>
+</html>

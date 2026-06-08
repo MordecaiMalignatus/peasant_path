@@ -152,6 +152,17 @@ module PeasantRoad
       puts "  launchctl load #{plist_path}"
     end
 
+    desc "serve", "Start the web interface"
+    option :port, type: :numeric, default: 4567, desc: "Port to bind"
+    option :bind, type: :string, default: "127.0.0.1", desc: "Address to bind"
+
+    def serve
+      require "peasant_road/web"
+      Web.set(:bind, options[:bind])
+      Web.set(:port, options[:port])
+      Web.run!
+    end
+
     desc "build [FIC_ID...]", "Build an EPUB for one or more followed stories (interactive selector if no IDs given)"
 
     def build(*fic_ids)

@@ -1,0 +1,147 @@
+require "sinatra/base"
+require "securerandom"
+
+module PeasantRoad
+  # The web interface. A thin front-end over Library, sharing the same
+  # filesystem-backed state as the CLI. No user handling — one shared library.
+  class Web < Sinatra::Base
+    # Serializes the slow pull/build work so a manual "pull now", a
+    # follow-triggered build, and (Phase 2) the scheduler never overlap.
+    # #run spawns a background thread and returns false if a job is already
+    # in flight. The boolean flag — not a held mutex — is the guard, so it's
+    # always released by the same thread that set it.
+    class Jobs
+      def initialize
+        @lock = Mutex.new
+        @busy = false
+      end
+
+      def busy?
+        @lock.synchronize { @busy }
+      end
+
+      def run
+        @lock.synchronize do
+          return false if @busy
+          @busy = true
+        end
+
+        Thread.new do
+          begin
+            yield
+          rescue => e
+            warn "[peasant_road] background job failed: #{e.class}: #{e.message}"
+          ensure
+            @lock.synchronize { @busy = false }
+          end
+        end
+
+        true
+      end
+    end
+
+    set :views, File.expand_path("../../views", __dir__)
+    set :library, Library.new
+    set :jobs, Jobs.new
+    enable :sessions
+    set :session_secret, ENV.fetch("PEASANT_ROAD_SESSION_SECRET") { SecureRandom.hex(64) }
+    # Self-hosted, no-auth tool bound to a host the operator chooses; permit any
+    # Host header rather than locking to a single name.
+    set :host_authorization, { permitted_hosts: [] }
+
+    helpers do
+      def library
+        settings.library
+      end
+
+      def flash!(message)
+        session[:flash] = message
+      end
+
+      def take_flash
+        session.delete(:flash)
+      end
+
+      # Build the per-story view model: chapter count plus which EPUBs are
+      # actually on disk, so the index links only to downloads that exist.
+      def story_rows
+        repo = library.repo
+        library.followed.map do |fic|
+          full = repo.epub_path(fic.fic_id, "#{fic.display_title}.epub")
+          volumes = fic.volumes.filter_map do |vol|
+            path = repo.epub_path(fic.fic_id, "#{fic.display_title} - #{vol["title"]}.epub")
+            { id: vol["id"], title: vol["title"] } if File.exist?(path)
+          end
+          {
+            fic: fic,
+            chapter_count: fic.chapters.size,
+            full_available: File.exist?(full),
+            volumes: volumes,
+          }
+        end
+      end
+
+      def followed?(fic_id)
+        library.config.followed_stories.include?(fic_id)
+      end
+
+      def send_epub(fic_id, filename)
+        path = library.repo.epub_path(fic_id, filename)
+        halt 404, "Not built yet" unless File.exist?(path)
+        send_file path, filename: File.basename(path), type: "application/epub+zip"
+      end
+    end
+
+    get "/" do
+      @stories = story_rows
+      @busy = settings.jobs.busy?
+      @last_pull = library.repo.read_pull_log.last&.dig("timestamp")
+      @flash = take_flash
+      erb :index
+    end
+
+    post "/follow" do
+      url = params[:url].to_s.strip
+      name = params[:name].to_s.strip
+      name = nil if name.empty?
+
+      begin
+        result = library.follow(url, name: name)
+        if result[:followed]
+          fic = result[:fic]
+          settings.jobs.run do
+            fic.pull
+            library.rebuild(fic)
+          end
+          flash! "Now following #{fic.display_title}. Downloading and building…"
+        else
+          flash! "Already following that story."
+        end
+      rescue Library::InvalidURL => e
+        flash! e.message
+      end
+
+      redirect to("/")
+    end
+
+    post "/pull" do
+      started = settings.jobs.run { library.refresh(throttle: true) }
+      flash!(started ? "Pull started." : "A pull is already running.")
+      redirect to("/")
+    end
+
+    get "/download/:fic_id" do |fic_id|
+      halt 404, "Unknown story" unless followed?(fic_id)
+      fic = Fic.from_disk(fic_id, library.repo)
+      send_epub(fic_id, "#{fic.display_title}.epub")
+    end
+
+    get "/download/:fic_id/volume/:volume_id" do |fic_id, volume_id|
+      halt 404, "Unknown story" unless followed?(fic_id)
+      fic = Fic.from_disk(fic_id, library.repo)
+      vol = fic.volumes.find { |v| v["id"].to_s == volume_id }
+      halt 404, "Unknown volume" unless vol
+      send_epub(fic_id, "#{fic.display_title} - #{vol["title"]}.epub")
+    end
+  end
+end
