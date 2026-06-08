@@ -1,5 +1,6 @@
 require "uri"
 require "time"
+require "logger"
 
 module PeasantRoad
   # The Library is the shared domain entry point for following stories and
@@ -12,8 +13,11 @@ module PeasantRoad
 
     attr_reader :repo
 
-    def initialize(repo: DiskRepository.new(DEFAULT_ROOT))
+    # logger defaults to a silent one so the CLI's own output isn't duplicated;
+    # the web/daemon injects a real logger to record pulls and rebuilds.
+    def initialize(repo: DiskRepository.new(DEFAULT_ROOT), logger: Logger.new(File::NULL))
       @repo = repo
+      @logger = logger
     end
 
     def config
@@ -58,12 +62,14 @@ module PeasantRoad
         begin
           new_chapters = fic.pull(throttle: throttle)
           results << { fic: fic, new_chapters: new_chapters, error: nil }
+          @logger.info("#{fic.display_title}: #{new_chapters.size} new chapter(s)") if new_chapters.any?
           log_entry[:fics] << {
             fic_id: fic.fic_id,
             title: fic.display_title,
             new_chapters: new_chapters.map(&:chapter_title),
           }
         rescue => e
+          @logger.warn("#{fic.display_title}: pull failed: #{e.message}")
           results << { fic: fic, new_chapters: [], error: e.message }
           log_entry[:fics] << {
             fic_id: fic.fic_id,
@@ -82,6 +88,7 @@ module PeasantRoad
     # directory. Assumes the fic's chapters are already on disk (no pull).
     def rebuild(fic)
       fic.book.build_all(@repo.build_dir(fic.fic_id))
+      @logger.info("rebuilt #{fic.display_title}")
     end
 
     # Given pull_all results, rebuild only the fics that gained chapters.

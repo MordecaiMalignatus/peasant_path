@@ -31,6 +31,7 @@ RSpec.describe PeasantRoad::Web do
   before do
     PeasantRoad::Web.set(:library, library)
     PeasantRoad::Web.set(:jobs, jobs)
+    PeasantRoad::Web.set(:app_logger, Logger.new(File::NULL))
   end
 
   after { FileUtils.rm_rf(tmpdir) }

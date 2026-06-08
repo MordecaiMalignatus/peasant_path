@@ -101,7 +101,7 @@ RSpec.describe PeasantRoad::Library do
 
   describe "#rebuild_changed" do
     it "rebuilds only the fics that gained chapters, into the build directory" do
-      changed = instance_double(PeasantRoad::Fic, fic_id: "1")
+      changed = instance_double(PeasantRoad::Fic, fic_id: "1", display_title: "Changed")
       unchanged = instance_double(PeasantRoad::Fic, fic_id: "2")
       changed_book = instance_double(PeasantRoad::Epub)
       allow(changed).to receive(:book).and_return(changed_book)

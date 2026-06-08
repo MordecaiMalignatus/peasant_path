@@ -1,17 +1,24 @@
 require "sinatra/base"
 require "securerandom"
+require "logger"
 
 module PeasantRoad
   # The web interface. A thin front-end over Library, sharing the same
   # filesystem-backed state as the CLI. No user handling — one shared library.
   class Web < Sinatra::Base
+    LOGGER = Logger.new($stdout)
+    LOGGER.formatter = proc do |severity, time, _progname, msg|
+      "[#{time.strftime("%Y-%m-%dT%H:%M:%S")}] #{severity} #{msg}\n"
+    end
+
     # Serializes the slow pull/build work so a manual "pull now", a
-    # follow-triggered build, and (Phase 2) the scheduler never overlap.
-    # #run spawns a background thread and returns false if a job is already
-    # in flight. The boolean flag — not a held mutex — is the guard, so it's
-    # always released by the same thread that set it.
+    # follow-triggered build, and the scheduler never overlap. #run spawns a
+    # background thread and returns false if a job is already in flight. The
+    # boolean flag — not a held mutex — is the guard, so it's always released by
+    # the same thread that set it.
     class Jobs
-      def initialize
+      def initialize(logger = Logger.new($stdout))
+        @logger = logger
         @lock = Mutex.new
         @busy = false
       end
@@ -30,7 +37,7 @@ module PeasantRoad
           begin
             yield
           rescue => e
-            warn "[peasant_road] background job failed: #{e.class}: #{e.message}"
+            @logger.error("background job failed: #{e.class}: #{e.message}")
           ensure
             @lock.synchronize { @busy = false }
           end
@@ -41,8 +48,9 @@ module PeasantRoad
     end
 
     set :views, File.expand_path("../../views", __dir__)
-    set :library, Library.new
-    set :jobs, Jobs.new
+    set :app_logger, LOGGER
+    set :library, Library.new(logger: LOGGER)
+    set :jobs, Jobs.new(LOGGER)
     enable :sessions
     set :session_secret, ENV.fetch("PEASANT_ROAD_SESSION_SECRET") { SecureRandom.hex(64) }
     # Self-hosted, no-auth tool bound to a host the operator chooses; permit any
@@ -52,9 +60,12 @@ module PeasantRoad
     # Start the in-process auto-pull loop, unless systemd's timer is driving it
     # (or it's disabled). Call once at boot, before run!.
     def self.start_scheduler!
-      return unless Scheduler.mode == :internal
+      mode = Scheduler.mode
+      settings.app_logger.info("scheduler mode: #{mode}")
+      return unless mode == :internal
 
       hours = Integer(ENV.fetch("PEASANT_ROAD_INTERVAL_HOURS", Scheduler::DEFAULT_INTERVAL_HOURS.to_s))
+      settings.app_logger.info("starting in-process pull loop, every #{hours}h")
       Scheduler.new(
         library: settings.library,
         jobs: settings.jobs,
@@ -62,9 +73,17 @@ module PeasantRoad
       ).start
     end
 
+    after do
+      settings.app_logger.info("#{request.request_method} #{request.path_info} #{response.status}")
+    end
+
     helpers do
       def library
         settings.library
+      end
+
+      def app_logger
+        settings.app_logger
       end
 
       def flash!(message)
@@ -123,7 +142,8 @@ module PeasantRoad
         if result[:followed]
           fic = result[:fic]
           settings.jobs.run do
-            fic.pull
+            new_chapters = fic.pull
+            app_logger.info("#{fic.display_title}: #{new_chapters.size} new chapter(s)")
             library.rebuild(fic)
           end
           flash! "Now following #{fic.display_title}. Downloading and building…"
