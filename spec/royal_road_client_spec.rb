@@ -1,7 +1,7 @@
-require "peasant_road"
+require "peasant_path"
 
-RSpec.describe PeasantRoad::RoyalRoadClient do
-  let(:client) { PeasantRoad::RoyalRoadClient.new }
+RSpec.describe PeasantPath::RoyalRoadClient do
+  let(:client) { PeasantPath::RoyalRoadClient.new }
   let(:sky_pride_html) { File.read(File.expand_path("../data/sky-pride.html", __dir__)) }
   let(:chapter_1_html) { File.read(File.expand_path("../data/chapter-1.html", __dir__)) }
 
@@ -12,7 +12,7 @@ RSpec.describe PeasantRoad::RoyalRoadClient do
            Next <br class="visible-xs-block">Chapter <i class="far fa-chevron-double-right ml-3"></i>
         </a>
       XML
-      expect(PeasantRoad::RoyalRoadClient.extract_button_link(input)).to eq "/fiction/107917/sky-pride/chapter/2113560/chapter-2--gourmet-in-the-garbage"
+      expect(PeasantPath::RoyalRoadClient.extract_button_link(input)).to eq "/fiction/107917/sky-pride/chapter/2113560/chapter-2--gourmet-in-the-garbage"
     end
 
     it "should return nil when the button is disabled" do
@@ -22,13 +22,13 @@ RSpec.describe PeasantRoad::RoyalRoadClient do
         </button>
       XML
 
-      expect(PeasantRoad::RoyalRoadClient.extract_button_link(input)).to be_nil
+      expect(PeasantPath::RoyalRoadClient.extract_button_link(input)).to be_nil
     end
   end
 
   describe "#fic_info" do
     before do
-      allow(PeasantRoad::RoyalRoadClient).to receive(:get).and_return(
+      allow(PeasantPath::RoyalRoadClient).to receive(:get).and_return(
         double(body: sky_pride_html)
       )
       allow(client).to receive(:download_picture).and_return("mock_image_data")
@@ -98,7 +98,7 @@ RSpec.describe PeasantRoad::RoyalRoadClient do
 
   describe "#chapter_overview" do
     before do
-      allow(PeasantRoad::RoyalRoadClient).to receive(:get).with("/fiction/107917/").and_return(
+      allow(PeasantPath::RoyalRoadClient).to receive(:get).with("/fiction/107917/").and_return(
         double(body: sky_pride_html)
       )
     end

@@ -1,18 +1,18 @@
 require "rbconfig"
 
-module PeasantRoad
+module PeasantPath
   # Decides how the auto-pull happens and, in the in-process fallback case, runs
   # it. systemd is the preferred ("external") mechanism; when it isn't driving
   # the pull we run an in-process loop instead.
   class Scheduler
-    TIMER_UNIT = "peasant-road-pull.timer".freeze
+    TIMER_UNIT = "peasant-path-pull.timer".freeze
     DEFAULT_INTERVAL_HOURS = 6
 
     # :off      — scheduling explicitly disabled
     # :external — a systemd timer is active; this process must not self-schedule
     # :internal — run the in-process loop
     def self.mode(env: ENV)
-      case env["PEASANT_ROAD_SCHEDULER"]
+      case env["PEASANT_PATH_SCHEDULER"]
       when "off" then :off
       when "internal" then :internal
       when "external" then :external
@@ -36,9 +36,9 @@ module PeasantRoad
     # Pure generator for the three --user units. Returns { filename => content }.
     def self.systemd_units(exec_serve:, exec_pull:, interval_hours: DEFAULT_INTERVAL_HOURS)
       {
-        "peasant-road-web.service" => <<~UNIT,
+        "peasant-path-web.service" => <<~UNIT,
           [Unit]
-          Description=Peasant Road web interface
+          Description=Peasant Path web interface
           After=network.target
 
           [Service]
@@ -48,17 +48,17 @@ module PeasantRoad
           [Install]
           WantedBy=default.target
         UNIT
-        "peasant-road-pull.service" => <<~UNIT,
+        "peasant-path-pull.service" => <<~UNIT,
           [Unit]
-          Description=Peasant Road chapter pull and rebuild
+          Description=Peasant Path chapter pull and rebuild
 
           [Service]
           Type=oneshot
           ExecStart=#{exec_pull}
         UNIT
-        "peasant-road-pull.timer" => <<~UNIT,
+        "peasant-path-pull.timer" => <<~UNIT,
           [Unit]
-          Description=Periodic Peasant Road pull
+          Description=Periodic Peasant Path pull
 
           [Timer]
           OnBootSec=15min

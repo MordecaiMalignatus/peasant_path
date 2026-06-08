@@ -1,8 +1,8 @@
-require "peasant_road"
+require "peasant_path"
 
-RSpec.describe PeasantRoad::Fic do
-  let(:mock_repo) { instance_double(PeasantRoad::DiskRepository) }
-  let(:mock_rr) { instance_double(PeasantRoad::RoyalRoadClient) }
+RSpec.describe PeasantPath::Fic do
+  let(:mock_repo) { instance_double(PeasantPath::DiskRepository) }
+  let(:mock_rr) { instance_double(PeasantPath::RoyalRoadClient) }
   let(:fic_id) { "107917" }
 
   let(:chapter_uri_1) { "https://www.royalroad.com/fiction/107917/sky-pride/chapter/2113501/chapter-1--in-the-care-of-a-hateful-god" }

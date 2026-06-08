@@ -1,13 +1,13 @@
-require "peasant_road"
+require "peasant_path"
 require "tmpdir"
 
-RSpec.describe PeasantRoad::Epub do
+RSpec.describe PeasantPath::Epub do
   let(:tmpdir) { Dir.mktmpdir }
-  let(:mock_repo) { instance_double(PeasantRoad::DiskRepository) }
+  let(:mock_repo) { instance_double(PeasantPath::DiskRepository) }
   let(:fic_cover_path) { "/config/107917/cover_image.jpg" }
   let(:mock_fic) do
     instance_double(
-      PeasantRoad::Fic,
+      PeasantPath::Fic,
       fic_id: "107917",
       display_title: "Sky Pride",
       author: "Warby Picus",
@@ -28,7 +28,7 @@ RSpec.describe PeasantRoad::Epub do
   after { FileUtils.rm_rf(tmpdir) }
 
   def make_chapters(count, volume_id:)
-    Array.new(count) { instance_double(PeasantRoad::Chapter, volume_id: volume_id, chapter_title: "Ch") }
+    Array.new(count) { instance_double(PeasantPath::Chapter, volume_id: volume_id, chapter_title: "Ch") }
   end
 
   def make_volume(id:, title:)

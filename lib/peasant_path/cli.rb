@@ -4,7 +4,7 @@ require "time"
 require "fileutils"
 require "thor"
 
-module PeasantRoad
+module PeasantPath
   class CLI < Thor
     def self.exit_on_failure?
       true
@@ -12,7 +12,7 @@ module PeasantRoad
 
     def initialize(*args)
       super
-      @repo = DiskRepository.new("#{Dir.home}/.config/peasant_road")
+      @repo = DiskRepository.new("#{Dir.home}/.config/peasant_path")
       @library = Library.new(repo: @repo)
       @config = Config.from_config_file(@repo.read_config_file)
     end
@@ -108,7 +108,7 @@ module PeasantRoad
       interval_seconds = (interval_hours * 3600).to_i
       ruby_path = RbConfig.ruby
       script_path = File.expand_path($PROGRAM_NAME)
-      plist_path = File.expand_path("~/Library/LaunchAgents/com.peasant_road.pull.plist")
+      plist_path = File.expand_path("~/Library/LaunchAgents/com.peasant_path.pull.plist")
       log_dir = File.expand_path("~/Library/Logs")
 
       plist = <<~XML
@@ -117,7 +117,7 @@ module PeasantRoad
         <plist version="1.0">
         <dict>
           <key>Label</key>
-          <string>com.peasant_road.pull</string>
+          <string>com.peasant_path.pull</string>
           <key>ProgramArguments</key>
           <array>
             <string>#{ruby_path}</string>
@@ -130,9 +130,9 @@ module PeasantRoad
           <key>RunAtLoad</key>
           <false/>
           <key>StandardOutPath</key>
-          <string>#{log_dir}/peasant_road.log</string>
+          <string>#{log_dir}/peasant_path.log</string>
           <key>StandardErrorPath</key>
-          <string>#{log_dir}/peasant_road.error.log</string>
+          <string>#{log_dir}/peasant_path.error.log</string>
         </dict>
         </plist>
       XML
@@ -149,7 +149,7 @@ module PeasantRoad
     option :bind, type: :string, default: "127.0.0.1", desc: "Address to bind"
 
     def serve
-      require "peasant_road/web"
+      require "peasant_path/web"
       Web.set(:bind, options[:bind])
       Web.set(:port, options[:port])
       Web.start_scheduler!
@@ -197,7 +197,7 @@ module PeasantRoad
       puts ""
       puts "Enable and start with:"
       puts "  systemctl --user daemon-reload"
-      puts "  systemctl --user enable --now peasant-road-web.service peasant-road-pull.timer"
+      puts "  systemctl --user enable --now peasant-path-web.service peasant-path-pull.timer"
       puts "  loginctl enable-linger #{ENV["USER"]}   # keep user units running without an active login"
     end
 

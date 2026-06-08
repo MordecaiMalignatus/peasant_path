@@ -1,7 +1,7 @@
 require "fileutils"
 require "json"
 
-module PeasantRoad
+module PeasantPath
   class DiskRepository
     attr_reader :root_path
 
@@ -103,6 +103,14 @@ module PeasantRoad
 
     def list_builds(fic_id)
       Dir.glob("#{build_dir(fic_id)}/*.epub").sort
+    end
+
+    # Rename a built EPUB in place, e.g. after a title change. No-op if the
+    # source isn't present, so callers needn't check first.
+    def rename_build(fic_id, old_filename, new_filename)
+      old = epub_path(fic_id, old_filename)
+      return unless File.exist?(old)
+      File.rename(old, epub_path(fic_id, new_filename))
     end
 
     def non_chapter_files(fic_id)

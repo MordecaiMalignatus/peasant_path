@@ -1,6 +1,6 @@
 require "json"
 
-module PeasantRoad
+module PeasantPath
   # The Config is a simple JSON file that contains some basic settings and
   # information. It's halfway between state file and configuration file, though it
   # is intended to use CLI options to set options rather than edit this file

@@ -24,6 +24,11 @@
       <div class="muted">
         <%= row[:fic].author %> &middot; <%= row[:chapter_count] %> chapters
       </div>
+      <form action="/rename" method="post" class="rename">
+        <input type="hidden" name="fic_id" value="<%= row[:fic].fic_id %>">
+        <input type="text" name="name" value="<%= h(row[:fic].display_title) %>" size="30" aria-label="Title">
+        <button type="submit" class="small"<%= " disabled" if @busy %>>Rename</button>
+      </form>
       <div class="downloads">
         <% if row[:full_available] %>
           <a href="/download/<%= row[:fic].fic_id %>">Download (complete)</a>
@@ -36,4 +41,8 @@
       </div>
     </div>
   <% end %>
+
+  <form action="/rebuild" method="post" class="rebuild-all">
+    <button type="submit" class="small"<%= " disabled" if @busy %>>Rebuild all EPUBs</button>
+  </form>
 <% end %>

@@ -1,17 +1,17 @@
-require "peasant_road"
+require "peasant_path"
 
-RSpec.describe PeasantRoad::Scheduler do
+RSpec.describe PeasantPath::Scheduler do
   describe ".mode" do
     it "honours an explicit 'off' override" do
-      expect(described_class.mode(env: { "PEASANT_ROAD_SCHEDULER" => "off" })).to eq :off
+      expect(described_class.mode(env: { "PEASANT_PATH_SCHEDULER" => "off" })).to eq :off
     end
 
     it "honours an explicit 'internal' override" do
-      expect(described_class.mode(env: { "PEASANT_ROAD_SCHEDULER" => "internal" })).to eq :internal
+      expect(described_class.mode(env: { "PEASANT_PATH_SCHEDULER" => "internal" })).to eq :internal
     end
 
     it "honours an explicit 'external' override" do
-      expect(described_class.mode(env: { "PEASANT_ROAD_SCHEDULER" => "external" })).to eq :external
+      expect(described_class.mode(env: { "PEASANT_PATH_SCHEDULER" => "external" })).to eq :external
     end
 
     it "is external when a systemd timer is active" do
@@ -43,26 +43,26 @@ RSpec.describe PeasantRoad::Scheduler do
 
     it "generates the three expected unit files" do
       expect(units.keys).to contain_exactly(
-        "peasant-road-web.service",
-        "peasant-road-pull.service",
-        "peasant-road-pull.timer"
+        "peasant-path-web.service",
+        "peasant-path-pull.service",
+        "peasant-path-pull.timer"
       )
     end
 
     it "points the web service at serve and restarts it" do
-      web = units["peasant-road-web.service"]
+      web = units["peasant-path-web.service"]
       expect(web).to include("ExecStart=/ruby /pr serve --bind 0.0.0.0 --port 9000")
       expect(web).to include("Restart=always")
     end
 
     it "points the pull service at refresh as a oneshot" do
-      pull = units["peasant-road-pull.service"]
+      pull = units["peasant-path-pull.service"]
       expect(pull).to include("Type=oneshot")
       expect(pull).to include("ExecStart=/ruby /pr refresh --throttle")
     end
 
     it "sets the timer interval and makes it persistent" do
-      timer = units["peasant-road-pull.timer"]
+      timer = units["peasant-path-pull.timer"]
       expect(timer).to include("OnUnitActiveSec=4h")
       expect(timer).to include("Persistent=true")
     end

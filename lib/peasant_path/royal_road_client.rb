@@ -1,7 +1,7 @@
 require "httparty"
 require "nokogiri"
 
-module PeasantRoad
+module PeasantPath
   class RoyalRoadClient
     include HTTParty
     base_uri "www.royalroad.com"

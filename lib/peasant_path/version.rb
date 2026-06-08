@@ -1,3 +1,3 @@
-module PeasantRoad
+module PeasantPath
   VERSION = "0.1.0"
 end

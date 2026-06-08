@@ -1,6 +1,6 @@
 require "json"
 
-module PeasantRoad
+module PeasantPath
   # Represents a singular chapter of a fic.
   class Chapter
     attr_reader :fic_id, :chapter_id, :uri, :repository

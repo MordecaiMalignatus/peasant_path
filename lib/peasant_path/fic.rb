@@ -1,7 +1,7 @@
 require "json"
 require "fileutils"
 
-module PeasantRoad
+module PeasantPath
   class Fic
     FIC_ID_REGEX = /https:\/\/www\.royalroad\.com\/fiction\/(\d+)\//
 

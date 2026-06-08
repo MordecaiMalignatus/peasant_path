@@ -1,6 +1,6 @@
-require "peasant_road"
+require "peasant_path"
 
-RSpec.describe PeasantRoad::Chapter do
+RSpec.describe PeasantPath::Chapter do
   let(:mock_repo) { double("DiskRepository") }
   let(:chapter_uri) { "https://www.royalroad.com/fiction/107917/sky-pride/chapter/2113501/chapter-1--in-the-care-of-a-hateful-god" }
 

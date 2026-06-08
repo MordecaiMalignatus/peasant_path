@@ -3,7 +3,7 @@ require "fileutils"
 require "gepub"
 require "nokogiri"
 
-module PeasantRoad
+module PeasantPath
   class Epub
     STUB_VOLUME_THRESHOLD = 10
 

@@ -1,5 +1,5 @@
-require_relative "lib/peasant_road"
-require_relative "lib/peasant_road/web"
+require_relative "lib/peasant_path"
+require_relative "lib/peasant_path/web"
 
-PeasantRoad::Web.start_scheduler!
-run PeasantRoad::Web
+PeasantPath::Web.start_scheduler!
+run PeasantPath::Web

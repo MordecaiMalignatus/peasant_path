@@ -1,19 +1,19 @@
-require "peasant_road"
-require "peasant_road/web"
+require "peasant_path"
+require "peasant_path/web"
 require "rack/test"
 require "tmpdir"
 require "json"
 
-RSpec.describe PeasantRoad::Web do
+RSpec.describe PeasantPath::Web do
   include Rack::Test::Methods
 
   def app
-    PeasantRoad::Web
+    PeasantPath::Web
   end
 
   let(:tmpdir) { Dir.mktmpdir }
-  let(:repo) { PeasantRoad::DiskRepository.new(tmpdir) }
-  let(:library) { PeasantRoad::Library.new(repo: repo) }
+  let(:repo) { PeasantPath::DiskRepository.new(tmpdir) }
+  let(:library) { PeasantPath::Library.new(repo: repo) }
   let(:fic_id) { "107917" }
 
   # Records that a background job was requested without spawning a thread or
@@ -29,9 +29,9 @@ RSpec.describe PeasantRoad::Web do
   end
 
   before do
-    PeasantRoad::Web.set(:library, library)
-    PeasantRoad::Web.set(:jobs, jobs)
-    PeasantRoad::Web.set(:app_logger, Logger.new(File::NULL))
+    PeasantPath::Web.set(:library, library)
+    PeasantPath::Web.set(:jobs, jobs)
+    PeasantPath::Web.set(:app_logger, Logger.new(File::NULL))
   end
 
   after { FileUtils.rm_rf(tmpdir) }
@@ -69,8 +69,8 @@ RSpec.describe PeasantRoad::Web do
 
   describe "POST /follow" do
     before do
-      mock_rr = instance_double(PeasantRoad::RoyalRoadClient)
-      allow(PeasantRoad::RoyalRoadClient).to receive(:new).and_return(mock_rr)
+      mock_rr = instance_double(PeasantPath::RoyalRoadClient)
+      allow(PeasantPath::RoyalRoadClient).to receive(:new).and_return(mock_rr)
       allow(mock_rr).to receive(:fic_info).and_return(
         title: "Sky Pride", author: "Author", description: "d",
         cover_image: "img", volumes: [], volume_covers: {},
@@ -96,6 +96,31 @@ RSpec.describe PeasantRoad::Web do
   describe "POST /pull" do
     it "starts a pull job" do
       post "/pull"
+      expect(last_response.status).to eq 302
+      expect(jobs.runs).to eq 1
+    end
+  end
+
+  describe "POST /rename" do
+    it "updates the display name and queues a rebuild" do
+      follow_fic
+      post "/rename", fic_id: fic_id, name: "Better Title"
+
+      expect(last_response.status).to eq 302
+      expect(repo.read_fic_info(fic_id)["display_name"]).to eq "Better Title"
+      expect(jobs.runs).to eq 1
+    end
+
+    it "404s for a story that is not followed" do
+      post "/rename", fic_id: "999999", name: "Nope"
+      expect(last_response.status).to eq 404
+      expect(jobs.runs).to eq 0
+    end
+  end
+
+  describe "POST /rebuild" do
+    it "starts a rebuild job" do
+      post "/rebuild"
       expect(last_response.status).to eq 302
       expect(jobs.runs).to eq 1
     end

@@ -2,7 +2,7 @@ require "sinatra/base"
 require "securerandom"
 require "logger"
 
-module PeasantRoad
+module PeasantPath
   # The web interface. A thin front-end over Library, sharing the same
   # filesystem-backed state as the CLI. No user handling — one shared library.
   class Web < Sinatra::Base
@@ -52,7 +52,7 @@ module PeasantRoad
     set :library, Library.new(logger: LOGGER)
     set :jobs, Jobs.new(LOGGER)
     enable :sessions
-    set :session_secret, ENV.fetch("PEASANT_ROAD_SESSION_SECRET") { SecureRandom.hex(64) }
+    set :session_secret, ENV.fetch("PEASANT_PATH_SESSION_SECRET") { SecureRandom.hex(64) }
     # Self-hosted, no-auth tool bound to a host the operator chooses; permit any
     # Host header rather than locking to a single name.
     set :host_authorization, { permitted_hosts: [] }
@@ -64,7 +64,7 @@ module PeasantRoad
       settings.app_logger.info("scheduler mode: #{mode}")
       return unless mode == :internal
 
-      hours = Integer(ENV.fetch("PEASANT_ROAD_INTERVAL_HOURS", Scheduler::DEFAULT_INTERVAL_HOURS.to_s))
+      hours = Integer(ENV.fetch("PEASANT_PATH_INTERVAL_HOURS", Scheduler::DEFAULT_INTERVAL_HOURS.to_s))
       settings.app_logger.info("starting in-process pull loop, every #{hours}h")
       Scheduler.new(
         library: settings.library,
@@ -84,6 +84,10 @@ module PeasantRoad
 
       def app_logger
         settings.app_logger
+      end
+
+      def h(text)
+        Rack::Utils.escape_html(text.to_s)
       end
 
       def flash!(message)
@@ -160,6 +164,25 @@ module PeasantRoad
     post "/pull" do
       started = settings.jobs.run { library.refresh(throttle: true) }
       flash!(started ? "Pull started." : "A pull is already running.")
+      redirect to("/")
+    end
+
+    post "/rename" do
+      fic_id = params[:fic_id].to_s
+      halt 404, "Unknown story" unless followed?(fic_id)
+
+      fic = library.rename(fic_id, params[:name])
+      started = settings.jobs.run { library.rebuild(fic) }
+      flash!(
+        started ? "Renamed to #{fic.display_title}. Rebuilding…" :
+          "Renamed to #{fic.display_title}. Rebuild will run once the current job finishes.",
+      )
+      redirect to("/")
+    end
+
+    post "/rebuild" do
+      started = settings.jobs.run { library.rebuild_all }
+      flash!(started ? "Rebuild started." : "A job is already running.")
       redirect to("/")
     end
 

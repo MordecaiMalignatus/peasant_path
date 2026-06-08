@@ -1,17 +1,17 @@
 # frozen_string_literal: true
 
-require_relative "lib/peasant_road/version"
+require_relative "lib/peasant_path/version"
 
 Gem::Specification.new do |spec|
-  spec.name = "peasant_road"
-  spec.version = PeasantRoad::VERSION
+  spec.name = "peasant_path"
+  spec.version = PeasantPath::VERSION
   spec.authors = ["MordecaiMalignatus"]
   spec.summary = "Download web fiction from RoyalRoad.com and convert to EPUB"
   spec.required_ruby_version = ">= 3.0"
 
   spec.files = Dir["lib/**/*.rb", "bin/*", "views/**/*", "config.ru"]
   spec.bindir = "bin"
-  spec.executables = ["peasant_road"]
+  spec.executables = ["peasant_path"]
   spec.require_paths = ["lib"]
 
   spec.add_dependency "nokogiri", "~> 1.19"

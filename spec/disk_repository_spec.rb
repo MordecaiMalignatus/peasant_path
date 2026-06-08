@@ -1,7 +1,7 @@
-require "peasant_road"
+require "peasant_path"
 require "tmpdir"
 
-RSpec.describe PeasantRoad::DiskRepository do
+RSpec.describe PeasantPath::DiskRepository do
   let(:tmpdir) { Dir.mktmpdir }
   let(:repo) { described_class.new(tmpdir) }
   let(:fic_id) { "107917" }

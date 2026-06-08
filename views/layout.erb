@@ -3,7 +3,7 @@
 <head>
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
-  <title>Peasant Road</title>
+  <title>Peasant Path</title>
   <style>
     :root { color-scheme: light dark; }
     body { font-family: system-ui, sans-serif; max-width: 52rem; margin: 2rem auto; padding: 0 1rem; line-height: 1.5; }
@@ -19,10 +19,14 @@
     .add input[type=text], .add input[type=url] { padding: 0.3rem; margin-right: 0.5rem; }
     button { padding: 0.35rem 0.75rem; cursor: pointer; }
     .pending { color: #b80; }
+    button.small { padding: 0.2rem 0.5rem; font-size: 0.8rem; }
+    .rebuild-all { margin-top: 1.5rem; }
+    .rename { margin: 0.35rem 0; }
+    .rename input[type=text] { padding: 0.2rem; margin-right: 0.4rem; font-size: 0.85rem; }
   </style>
 </head>
 <body>
-  <h1>Peasant Road</h1>
+  <h1>Peasant Path</h1>
   <% if @flash %><div class="flash"><%= @flash %></div><% end %>
   <%= yield %>
 </body>

@@ -1,11 +1,11 @@
-require "peasant_road"
+require "peasant_path"
 require "tmpdir"
 
-RSpec.describe PeasantRoad::Library do
+RSpec.describe PeasantPath::Library do
   let(:tmpdir) { Dir.mktmpdir }
-  let(:repo) { PeasantRoad::DiskRepository.new(tmpdir) }
+  let(:repo) { PeasantPath::DiskRepository.new(tmpdir) }
   let(:library) { described_class.new(repo: repo) }
-  let(:mock_rr) { instance_double(PeasantRoad::RoyalRoadClient) }
+  let(:mock_rr) { instance_double(PeasantPath::RoyalRoadClient) }
   let(:fic_id) { "107917" }
   let(:url) { "https://www.royalroad.com/fiction/107917/sky-pride" }
 
@@ -28,7 +28,7 @@ RSpec.describe PeasantRoad::Library do
   end
 
   before do
-    allow(PeasantRoad::RoyalRoadClient).to receive(:new).and_return(mock_rr)
+    allow(PeasantPath::RoyalRoadClient).to receive(:new).and_return(mock_rr)
     allow(mock_rr).to receive(:fic_info).and_return(fic_info)
   end
 
@@ -36,7 +36,7 @@ RSpec.describe PeasantRoad::Library do
 
   describe "#follow" do
     it "rejects non-RoyalRoad URLs" do
-      expect { library.follow("https://example.com/fiction/1/") }.to raise_error(PeasantRoad::Library::InvalidURL)
+      expect { library.follow("https://example.com/fiction/1/") }.to raise_error(PeasantPath::Library::InvalidURL)
     end
 
     it "registers a new story and persists its info" do
@@ -101,9 +101,9 @@ RSpec.describe PeasantRoad::Library do
 
   describe "#rebuild_changed" do
     it "rebuilds only the fics that gained chapters, into the build directory" do
-      changed = instance_double(PeasantRoad::Fic, fic_id: "1", display_title: "Changed")
-      unchanged = instance_double(PeasantRoad::Fic, fic_id: "2")
-      changed_book = instance_double(PeasantRoad::Epub)
+      changed = instance_double(PeasantPath::Fic, fic_id: "1", display_title: "Changed")
+      unchanged = instance_double(PeasantPath::Fic, fic_id: "2")
+      changed_book = instance_double(PeasantPath::Epub)
       allow(changed).to receive(:book).and_return(changed_book)
       allow(changed_book).to receive(:build_all)
       allow(unchanged).to receive(:book)
@@ -115,6 +115,39 @@ RSpec.describe PeasantRoad::Library do
 
       expect(changed_book).to have_received(:build_all).with(repo.build_dir("1"))
       expect(unchanged).not_to have_received(:book)
+    end
+  end
+
+  describe "#rename" do
+    before { library.follow(url) }
+
+    it "sets the display name while preserving the scraped info" do
+      fic = library.rename(fic_id, "New Title")
+
+      expect(fic.display_title).to eq "New Title"
+      info = repo.read_fic_info(fic_id)
+      expect(info["display_name"]).to eq "New Title"
+      expect(info["title"]).to eq "Sky Pride"
+    end
+
+    it "clears a blank name back to the scraped title" do
+      library.rename(fic_id, "New Title")
+      fic = library.rename(fic_id, "  ")
+
+      expect(fic.display_title).to eq "Sky Pride"
+      expect(repo.read_fic_info(fic_id)["display_name"]).to be_nil
+    end
+
+    it "renames the existing builds so downloads stay available" do
+      FileUtils.mkdir_p(repo.build_dir(fic_id))
+      File.write(repo.epub_path(fic_id, "Sky Pride.epub"), "epub")
+      File.write(repo.epub_path(fic_id, "Sky Pride - Volume 1.epub"), "vol")
+
+      library.rename(fic_id, "New Title")
+
+      expect(File).to exist(repo.epub_path(fic_id, "New Title.epub"))
+      expect(File).to exist(repo.epub_path(fic_id, "New Title - Volume 1.epub"))
+      expect(File).not_to exist(repo.epub_path(fic_id, "Sky Pride.epub"))
     end
   end
 
