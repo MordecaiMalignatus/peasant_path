@@ -28,13 +28,24 @@ RSpec.describe PeasantPath::Web do
     end.new
   end
 
+  # Web is a Sinatra class with class-level settings, so injecting test doubles
+  # mutates global state. Capture the prior values and restore them afterwards so
+  # nothing leaks between examples or into other specs loaded later.
   before do
+    @prior_settings = {
+      library: PeasantPath::Web.settings.library,
+      jobs: PeasantPath::Web.settings.jobs,
+      app_logger: PeasantPath::Web.settings.app_logger,
+    }
     PeasantPath::Web.set(:library, library)
     PeasantPath::Web.set(:jobs, jobs)
     PeasantPath::Web.set(:app_logger, Logger.new(File::NULL))
   end
 
-  after { FileUtils.rm_rf(tmpdir) }
+  after do
+    @prior_settings.each { |key, value| PeasantPath::Web.set(key, value) }
+    FileUtils.rm_rf(tmpdir)
+  end
 
   def follow_fic(title: "Sky Pride", volumes: [])
     repo.write_config_file(JSON.generate(followed_stories: [fic_id]))

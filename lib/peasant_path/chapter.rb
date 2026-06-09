@@ -36,9 +36,9 @@ module PeasantPath
 
     def self.from_overview_hash(hash, repo)
       c = new("https://www.royalroad.com#{hash["url"]}", repo)
-      c.chapter_title = hash['title']
-      c.order_number = hash['order']
-      c.volume_id = hash['volumeId']
+      c.chapter_title = hash["title"]
+      c.order_number = hash["order"]
+      c.volume_id = hash["volumeId"]
 
       c
     end
@@ -47,8 +47,12 @@ module PeasantPath
       @chapter_id
     end
 
+    # Chapters are write-once: once a chapter is on disk we never re-fetch it, so
+    # an upstream edit to an already-pulled chapter is intentionally not picked
+    # up. Persisting an existing chapter is therefore a no-op.
     def persist
       raise "Fetch the chapter before trying to save it to disk." if @chapter_title.nil? || @chapter_text.nil?
+      return self if @repository.chapter_exists?(@fic_id, @chapter_id)
 
       body = JSON.pretty_generate({
         fic_id: @fic_id,
@@ -58,13 +62,9 @@ module PeasantPath
         next_chapter: @next_chapter,
         previous_chapter: @previous_chapter,
         volume_id: @volume_id,
-        order_number: @order_number
+        order_number: @order_number,
       })
-      begin
-        @repository.read_chapter(@fic_id, @chapter_id)
-      rescue Errno::ENOENT
-        @repository.write_chapter(@fic_id, @chapter_id, body)
-      end
+      @repository.write_chapter(@fic_id, @chapter_id, body)
 
       self
     end

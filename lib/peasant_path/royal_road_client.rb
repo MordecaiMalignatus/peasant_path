@@ -35,7 +35,7 @@ module PeasantPath
       cover_attr = doc.css(".fic-header").css("img").attribute("src")
       if cover_attr.nil?
         raise ScrapeError, "#{uri}: could not find the cover image in the page " \
-          "(RoyalRoad markup may have changed, or an error/rate-limit page was served)"
+              "(RoyalRoad markup may have changed, or an error/rate-limit page was served)"
       end
       cover_image_url = cover_attr.value
       volume_covers = volumes.each_with_object({}) do |vol, h|
@@ -88,10 +88,15 @@ module PeasantPath
       elem.attribute("href").value
     end
 
+    # Covers live on royalroadcdn.com, a different host than base_uri
+    # (www.royalroad.com), so this uses HTTParty.get with the absolute URL
+    # rather than self.class.get, which is scoped to base_uri.
     def download_picture(url)
       resp = HTTParty.get(url, open_timeout: HTTP_TIMEOUT_SECONDS, read_timeout: HTTP_TIMEOUT_SECONDS)
       if resp.code != 200
-        raise "cover_image: got unexpected response code from the CDN: #{resp.inspect}"
+        # Report only the status, not resp.inspect, which would dump the whole
+        # response body into the message/log.
+        raise "cover_image: got unexpected response code #{resp.code} from the CDN for #{url}"
       end
       resp.body
     end
@@ -105,7 +110,7 @@ module PeasantPath
       line = body.lines.find { |l| /#{Regexp.escape(var_name)} =/.match(l) }
       if line.nil?
         raise ScrapeError, "#{context}: could not find `#{var_name}` in the page " \
-          "(RoyalRoad markup may have changed, or an error/rate-limit page was served)"
+              "(RoyalRoad markup may have changed, or an error/rate-limit page was served)"
       end
 
       line.strip.delete_prefix("#{var_name} = ").delete_suffix(";")

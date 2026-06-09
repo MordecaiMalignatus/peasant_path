@@ -44,6 +44,18 @@ peasant_path serve [--port 4567] [--bind 127.0.0.1]
 bundle exec rackup config.ru
 ```
 
+> **Exposure caveat.** The app has no authentication and no Host-header check,
+> and it mutates state (triggers scrapes, writes files). That's fine bound to
+> the default `127.0.0.1`. If you `--bind` to a non-loopback address you're
+> putting an unauthenticated, mutating, DNS-rebinding-susceptible app on the
+> network — only do so behind a trusted reverse proxy / your own auth.
+>
+> **Session secret.** Flash messages use a signed session cookie. With no
+> `PEASANT_PATH_SESSION_SECRET` set, each process generates a random one at
+> boot, which is fine for a single worker but breaks flashes across a
+> multi-worker Puma and invalidates sessions on restart. Set
+> `PEASANT_PATH_SESSION_SECRET` to a fixed value if you run more than one worker.
+
 ### Automatic pulling
 
 The server pulls and rebuilds changed stories on a schedule. There are two

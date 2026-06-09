@@ -25,6 +25,9 @@ module PeasantPath
       ))
     end
 
+    # Not transactional: if a volume build raises partway through, the combined
+    # EPUB (and any volumes built before the failure) are left in place. Low
+    # stakes — the next rebuild overwrites them — but worth knowing.
     def build_all(dir = Dir.pwd)
       build(dir)
       build_volumes(dir)

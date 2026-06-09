@@ -7,6 +7,9 @@ module PeasantPath
   class Scheduler
     TIMER_UNIT = "peasant-path-pull.timer".freeze
     DEFAULT_INTERVAL_HOURS = 6
+    # Match systemd's OnBootSec=15min: pull once shortly after boot rather than
+    # waiting a full interval, so a freshly started daemon isn't idle for hours.
+    BOOT_DELAY_SECONDS = 15 * 60
 
     # :off      — scheduling explicitly disabled
     # :external — a systemd timer is active; this process must not self-schedule
@@ -71,19 +74,22 @@ module PeasantPath
       }
     end
 
-    def initialize(library:, jobs:, interval_seconds:)
+    def initialize(library:, jobs:, interval_seconds:, boot_delay_seconds: BOOT_DELAY_SECONDS)
       @library = library
       @jobs = jobs
       @interval_seconds = interval_seconds
+      @boot_delay_seconds = boot_delay_seconds
     end
 
     # Start the in-process loop. Refreshes through the shared Jobs runner so a
-    # scheduled pull never overlaps a manual "pull now" or a follow-build.
+    # scheduled pull never overlaps a manual "pull now" or a follow-build. Pulls
+    # once after a short boot delay, then every interval thereafter.
     def start
       @thread = Thread.new do
+        sleep @boot_delay_seconds
         loop do
-          sleep @interval_seconds
           @jobs.run { @library.refresh(throttle: true) }
+          sleep @interval_seconds
         end
       end
     end

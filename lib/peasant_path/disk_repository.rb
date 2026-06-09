@@ -10,18 +10,21 @@ module PeasantPath
     end
 
     def ensure_config_file
-      return if File.exist?("#{@root_path}/config.json")
+      return if File.exist?(config_path)
       FileUtils.mkdir_p(@root_path)
-      File.write("#{@root_path}/config.json", "{}")
+      File.write(config_path, "{}")
     end
 
+    # String keys, matching read_fic_info and read_pull_log: every JSON read in
+    # this repo returns string keys, so consumers don't have to remember which
+    # file symbolizes and which doesn't.
     def read_config_file
       ensure_config_file
-      JSON.parse(File.read("#{@root_path}/config.json"), symbolize_names: true)
+      JSON.parse(File.read(config_path))
     end
 
     def write_config_file(content)
-      File.write("#{@root_path}/config.json", content)
+      File.write(config_path, content)
     end
 
     def read_chapter_from_path(path)
@@ -31,22 +34,26 @@ module PeasantPath
 
     # This is used to read with a slug from the state file.
     def read_chapter(fic_id, chapter_id)
-      JSON.parse(File.read("#{fic_dir(fic_id)}/#{chapter_id}"))
+      JSON.parse(File.read(File.join(fic_dir(fic_id), chapter_id)))
     end
 
     def write_chapter(fic_id, chapter_id, content)
       FileUtils.mkdir_p(fic_dir(fic_id))
-      File.write("#{fic_dir(fic_id)}/#{chapter_id}", content)
+      File.write(File.join(fic_dir(fic_id), chapter_id), content)
+    end
+
+    def chapter_exists?(fic_id, chapter_id)
+      File.exist?(File.join(fic_dir(fic_id), chapter_id))
     end
 
     def list_chapters(fic_id)
-      items = Dir.glob("#{fic_dir(fic_id)}/*")
+      items = Dir.glob(File.join(fic_dir(fic_id), "*"))
       return [] if items.empty?
       items.reject { |f| non_chapter_files(fic_id).include?(f) }
     end
 
     def volume_cover_image_path(fic_id, volume_id)
-      "#{fic_dir(fic_id)}/volume_#{volume_id}_cover.jpg"
+      File.join(fic_dir(fic_id), "volume_#{volume_id}_cover.jpg")
     end
 
     def write_volume_cover_image(fic_id, volume_id, content)
@@ -59,16 +66,16 @@ module PeasantPath
     end
 
     def read_fic_info(fic_id)
-      JSON.parse(File.read("#{fic_dir(fic_id)}/fic_info.json"))
+      JSON.parse(File.read(File.join(fic_dir(fic_id), "fic_info.json")))
     end
 
     def write_fic_info(fic_id, content)
       FileUtils.mkdir_p(fic_dir(fic_id))
-      File.write("#{fic_dir(fic_id)}/fic_info.json", content)
+      File.write(File.join(fic_dir(fic_id), "fic_info.json"), content)
     end
 
     def cover_image_path(fic_id)
-      "#{fic_dir(fic_id)}/cover_image.jpg"
+      File.join(fic_dir(fic_id), "cover_image.jpg")
     end
 
     def write_cover_image(fic_id, content)
@@ -77,7 +84,7 @@ module PeasantPath
     end
 
     def pull_log_path
-      "#{@root_path}/pull_log.jsonl"
+      File.join(@root_path, "pull_log.jsonl")
     end
 
     def append_pull_log(entry)
@@ -94,15 +101,15 @@ module PeasantPath
     # separate from the fic directory so they're never mistaken for chapters by
     # #list_chapters.
     def build_dir(fic_id)
-      "#{@root_path}/builds/#{fic_id}"
+      File.join(@root_path, "builds", fic_id)
     end
 
     def epub_path(fic_id, filename)
-      "#{build_dir(fic_id)}/#{filename}"
+      File.join(build_dir(fic_id), filename)
     end
 
     def list_builds(fic_id)
-      Dir.glob("#{build_dir(fic_id)}/*.epub").sort
+      Dir.glob(File.join(build_dir(fic_id), "*.epub")).sort
     end
 
     # Rename a built EPUB in place, e.g. after a title change. No-op if the
@@ -114,13 +121,18 @@ module PeasantPath
     end
 
     def non_chapter_files(fic_id)
-      ["#{fic_dir(fic_id)}/fic_info.json", cover_image_path(fic_id)] + Dir.glob("#{fic_dir(fic_id)}/volume_*_cover.jpg")
+      [File.join(fic_dir(fic_id), "fic_info.json"), cover_image_path(fic_id)] +
+        Dir.glob(File.join(fic_dir(fic_id), "volume_*_cover.jpg"))
     end
 
     private
 
+    def config_path
+      File.join(@root_path, "config.json")
+    end
+
     def fic_dir(fic_id)
-      "#{@root_path}/#{fic_id}"
+      File.join(@root_path, fic_id)
     end
   end
 end

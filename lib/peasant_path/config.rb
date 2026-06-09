@@ -16,7 +16,7 @@ module PeasantPath
     # key (a setting added by a newer version, or a hand-edit) must be ignored
     # rather than crash every command with ArgumentError.
     def self.from_config_file(config_content)
-      new(followed_stories: config_content[:followed_stories])
+      new(followed_stories: config_content["followed_stories"])
     end
 
     def to_json
