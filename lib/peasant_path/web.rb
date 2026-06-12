@@ -1,6 +1,7 @@
 require "sinatra/base"
 require "securerandom"
 require "logger"
+require "time"
 
 module PeasantPath
   # The web interface. A thin front-end over Library, sharing the same
@@ -102,7 +103,7 @@ module PeasantPath
       # actually on disk, so the index links only to downloads that exist.
       def story_rows
         repo = library.repo
-        library.followed.map do |fic|
+        library.followed.sort_by { |fic| fic.display_title.downcase }.map do |fic|
           full = repo.epub_path(fic.fic_id, "#{fic.display_title}.epub")
           volumes = fic.volumes.filter_map do |vol|
             path = repo.epub_path(fic.fic_id, "#{fic.display_title} - #{vol["title"]}.epub")
@@ -110,7 +111,7 @@ module PeasantPath
           end
           {
             fic: fic,
-            chapter_count: fic.chapters.size,
+            chapter_count: fic.chapter_count,
             full_available: File.exist?(full),
             volumes: volumes,
           }
@@ -131,7 +132,8 @@ module PeasantPath
     get "/" do
       @stories = story_rows
       @busy = settings.jobs.busy?
-      @last_pull = library.repo.read_pull_log.last&.dig("timestamp")
+      last_pull = library.repo.read_pull_log.last&.dig("timestamp")
+      @last_pull = last_pull && Time.parse(last_pull).strftime("%Y-%m-%d %H:%M")
       @flash = take_flash
       erb :index
     end

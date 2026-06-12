@@ -134,6 +134,9 @@ module PeasantPath
     def refresh(throttle: false)
       results = pull_all(throttle: throttle)
       rebuild_changed(results)
+      new_count = results.sum { |r| r[:new_chapters].size }
+      errors = results.count { |r| r[:error] }
+      @logger.info("refresh finished: #{new_count} new chapter(s) across #{results.size} stories#{errors.positive? ? ", #{errors} error(s)" : ""}")
       results
     end
 

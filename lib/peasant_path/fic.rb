@@ -5,18 +5,30 @@ module PeasantPath
   class Fic
     FIC_ID_REGEX = /https:\/\/www\.royalroad\.com\/fiction\/(\d+)\//
 
-    attr_accessor :title, :uri, :author, :chapters, :description, :display_name, :volumes
+    attr_accessor :title, :uri, :author, :description, :display_name, :volumes
     attr_reader :fic_id, :repository
 
     def initialize(fic_id:, repository:)
       @repository = repository
       @fic_id = fic_id
       @uri = "https://www.royalroad.com/fiction/#{fic_id}/"
-      @chapters = discover_chapters_on_disk
+      @chapters = nil
       @title = nil
       @author = nil
       @display_name = nil
       @volumes = []
+    end
+
+    # Chapter contents are only read from disk on first access. Display-only
+    # callers (the web index, download filenames) never need them, and reading
+    # every chapter of every fic per request made the index slow.
+    def chapters
+      @chapters ||= discover_chapters_on_disk
+    end
+
+    # Cheap count for display: lists the chapter files without reading them.
+    def chapter_count
+      @chapters ? @chapters.size : @repository.list_chapters(@fic_id).size
     end
 
     # The scraper client is built lazily and only when a fic actually pulls.
@@ -93,7 +105,7 @@ module PeasantPath
     # persisting one must never overwrite the existing cover files with empty
     # data — only the metadata JSON is rewritten in that case.
     def persist_fic_info
-      chapters = @chapters.map(&:to_slug)
+      chapters = self.chapters.map(&:to_slug)
       new_state = JSON.pretty_generate({ author: @author, title: @title, display_name: @display_name, description: @description, volumes: @volumes, chapters: chapters })
 
       @repository.write_fic_info(@fic_id, new_state)

@@ -1,11 +1,12 @@
-<p class="muted">
-  <% if @last_pull %>Last pull: <%= @last_pull %>.<% else %>No pulls yet.<% end %>
-  <% if @busy %> &middot; a pull is running…<% end %>
-</p>
-
-<form action="/pull" method="post">
-  <button type="submit"<%= " disabled" if @busy %>>Pull now</button>
-</form>
+<div class="pull">
+  <form action="/pull" method="post">
+    <button type="submit"<%= " disabled" if @busy %>>Pull now</button>
+  </form>
+  <span class="muted">
+    <% if @last_pull %>Last pull: <%= @last_pull %>.<% else %>No pulls yet.<% end %>
+    <% if @busy %> &middot; a pull is running…<% end %>
+  </span>
+</div>
 
 <div class="add">
   <form action="/follow" method="post">
@@ -23,12 +24,16 @@
       <h3><%= row[:fic].display_title %></h3>
       <div class="muted">
         <%= row[:fic].author %> &middot; <%= row[:chapter_count] %> chapters
+        &middot;
+        <details class="rename">
+          <summary>Rename</summary>
+          <form action="/rename" method="post">
+            <input type="hidden" name="fic_id" value="<%= row[:fic].fic_id %>">
+            <input type="text" name="name" value="<%= h(row[:fic].display_title) %>" size="30" aria-label="Title">
+            <button type="submit" class="small"<%= " disabled" if @busy %>>Rename</button>
+          </form>
+        </details>
       </div>
-      <form action="/rename" method="post" class="rename">
-        <input type="hidden" name="fic_id" value="<%= row[:fic].fic_id %>">
-        <input type="text" name="name" value="<%= h(row[:fic].display_title) %>" size="30" aria-label="Title">
-        <button type="submit" class="small"<%= " disabled" if @busy %>>Rename</button>
-      </form>
       <div class="downloads">
         <% if row[:full_available] %>
           <a href="/download/<%= row[:fic].fic_id %>">Download (complete)</a>
