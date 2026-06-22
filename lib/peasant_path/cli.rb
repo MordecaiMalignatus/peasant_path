@@ -12,7 +12,7 @@ module PeasantPath
 
     def initialize(*args)
       super
-      @repo = DiskRepository.new("#{Dir.home}/.config/peasant_path")
+      @repo = DiskRepository.new(Library::DEFAULT_ROOT)
       @library = Library.new(repo: @repo)
       @config = Config.from_config_file(@repo.read_config_file)
     end
@@ -35,6 +35,16 @@ module PeasantPath
       end
     rescue Library::InvalidURL => e
       raise Thor::Error, e.message
+    end
+
+    desc "unfollow FIC_ID", "Stop following a story while keeping downloaded files"
+
+    def unfollow(fic_id)
+      if @library.unfollow(fic_id)
+        puts "Unfollowed #{fic_id}. Downloaded files were left on disk."
+      else
+        puts "Not following #{fic_id}."
+      end
     end
 
     desc "pull", "Pull new chapters for all followed stories"
@@ -61,30 +71,9 @@ module PeasantPath
         return
       end
 
-      cutoff = Time.now - (options[:hours] * 3600)
-      entries = all_entries.select { |e| Time.parse(e["timestamp"]) >= cutoff }
-
-      fic_data = {}
-      entries.each do |entry|
-        time = Time.parse(entry["timestamp"])
-        entry["fics"].each do |fic|
-          fic_data[fic["fic_id"]] ||= { title: fic["title"], runs: [] }
-          fic_data[fic["fic_id"]][:runs] << {
-            time: time,
-            new_chapters: fic["new_chapters"],
-            error: fic["error"],
-          }
-        end
-      end
-
-      @config.followed_stories.each do |fic_id|
-        next if fic_data.key?(fic_id)
-        fic_data[fic_id] = { title: Fic.from_disk(fic_id, @repo).display_title, runs: [] }
-      end
-
-      sorted = fic_data.sort_by { |_, d| [-d[:runs].sum { |r| r[:new_chapters].length }, d[:title]] }
-
-      active, quiet = sorted.partition { |_, d| d[:runs].any? { |r| r[:new_chapters].any? || r[:error] } }
+      report = @library.report(hours: options[:hours])
+      active = report[:active]
+      quiet = report[:quiet]
 
       active.each do |_, data|
         puts data[:title]
@@ -111,31 +100,12 @@ module PeasantPath
       plist_path = File.expand_path("~/Library/LaunchAgents/com.peasant_path.pull.plist")
       log_dir = File.expand_path("~/Library/Logs")
 
-      plist = <<~XML
-        <?xml version="1.0" encoding="UTF-8"?>
-        <!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
-        <plist version="1.0">
-        <dict>
-          <key>Label</key>
-          <string>com.peasant_path.pull</string>
-          <key>ProgramArguments</key>
-          <array>
-            <string>#{ruby_path}</string>
-            <string>#{script_path}</string>
-            <string>refresh</string>
-            <string>--throttle</string>
-          </array>
-          <key>StartInterval</key>
-          <integer>#{interval_seconds}</integer>
-          <key>RunAtLoad</key>
-          <false/>
-          <key>StandardOutPath</key>
-          <string>#{log_dir}/peasant_path.log</string>
-          <key>StandardErrorPath</key>
-          <string>#{log_dir}/peasant_path.error.log</string>
-        </dict>
-        </plist>
-      XML
+      plist = Scheduler.launchd_plist(
+        ruby_path: ruby_path,
+        script_path: script_path,
+        interval_seconds: interval_seconds,
+        log_dir: log_dir,
+      )
 
       File.write(plist_path, plist)
       interval_label = interval_hours == 1 ? "every hour" : "every #{interval_hours} hours"
@@ -167,7 +137,7 @@ module PeasantPath
       fic_ids.each do |fid|
         puts "Building EPUB for fic ID #{fid}..."
         f = Fic.from_disk(fid, @repo)
-        f.pull
+        @library.pull_fic(f)
         f.book.build_all(Dir.pwd)
       end
     end

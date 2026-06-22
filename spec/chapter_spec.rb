@@ -4,6 +4,14 @@ RSpec.describe PeasantPath::Chapter do
   let(:mock_repo) { double("DiskRepository") }
   let(:chapter_uri) { "https://www.royalroad.com/fiction/107917/sky-pride/chapter/2113501/chapter-1--in-the-care-of-a-hateful-god" }
 
+  describe "#initialize" do
+    it "raises a clear error for invalid chapter URLs" do
+      expect {
+        described_class.new("https://example.com/not-a-chapter", mock_repo)
+      }.to raise_error(described_class::InvalidURL, /Invalid RoyalRoad chapter URL/)
+    end
+  end
+
   describe ".from_disk_content" do
     let(:new_format_content) do
       {
@@ -13,7 +21,7 @@ RSpec.describe PeasantPath::Chapter do
         "next_chapter" => "/fiction/107917/sky-pride/chapter/2113560/chapter-2--gourmet-in-the-garbage",
         "previous_chapter" => nil,
         "volume_id" => 10395,
-        "order_number" => 0
+        "order_number" => 0,
       }
     end
 
@@ -23,7 +31,7 @@ RSpec.describe PeasantPath::Chapter do
         "chapter_title" => "Chapter 1- In the Care of a Hateful God",
         "chapter_text" => "<p>Content</p>",
         "next_chapter" => "/fiction/107917/sky-pride/chapter/2113560/chapter-2--gourmet-in-the-garbage",
-        "previous_chapter" => nil
+        "previous_chapter" => nil,
       }
     end
 

@@ -16,9 +16,10 @@ module PeasantPath
 
     # logger defaults to a silent one so the CLI's own output isn't duplicated;
     # the web/daemon injects a real logger to record pulls and rebuilds.
-    def initialize(repo: DiskRepository.new(DEFAULT_ROOT), logger: Logger.new(File::NULL))
+    def initialize(repo: DiskRepository.new(DEFAULT_ROOT), logger: Logger.new(File::NULL), client: RoyalRoadClient.new)
       @repo = repo
       @logger = logger
+      @client = client
     end
 
     def config
@@ -46,9 +47,17 @@ module PeasantPath
       fic = Fic.new(fic_id: fic_id, repository: @repo)
       fic.display_name = name
       fic.persist_fic_info
-      @repo.write_config_file(cfg.to_json)
+      @repo.write_config(cfg)
 
       { fic_id: fic_id, followed: true, fic: fic }
+    end
+
+    def unfollow(fic_id)
+      cfg = config
+      removed = cfg.followed_stories.delete(fic_id.to_s)
+      @repo.write_config(cfg)
+      @logger.info("unfollowed #{fic_id}") if removed
+      !!removed
     end
 
     # Change a story's display name, editing the persisted fic_info in place so
@@ -62,14 +71,14 @@ module PeasantPath
       old_title = info["display_name"] || info["title"]
       cleaned = name.to_s.strip
       info["display_name"] = cleaned.empty? ? nil : cleaned
-      @repo.write_fic_info(fic_id, JSON.pretty_generate(info))
+      @repo.write_fic_info_hash(fic_id, info)
 
       fic = Fic.from_disk(fic_id, @repo)
       new_title = fic.display_title
       if new_title != old_title
-        @repo.rename_build(fic_id, "#{old_title}.epub", "#{new_title}.epub")
+        @repo.rename_build(fic_id, @repo.epub_filename(old_title), @repo.epub_filename(new_title))
         fic.volumes.each do |vol|
-          @repo.rename_build(fic_id, "#{old_title} - #{vol["title"]}.epub", "#{new_title} - #{vol["title"]}.epub")
+          @repo.rename_build(fic_id, @repo.epub_filename("#{old_title} - #{vol["title"]}"), @repo.epub_filename("#{new_title} - #{vol["title"]}"))
         end
       end
 
@@ -86,7 +95,7 @@ module PeasantPath
 
       followed.each do |fic|
         begin
-          new_chapters = fic.pull(throttle: throttle)
+          new_chapters = pull_fic(fic, throttle: throttle)
           results << { fic: fic, new_chapters: new_chapters, error: nil }
           @logger.info("#{fic.display_title}: #{new_chapters.size} new chapter(s)") if new_chapters.any?
           log_entry[:fics] << {
@@ -108,6 +117,20 @@ module PeasantPath
 
       @repo.append_pull_log(log_entry)
       results
+    end
+
+    def pull_fic(fic, throttle: false)
+      @client.throttle = throttle
+      chapters = fic.chapters
+      chapter_toc = @client.chapter_overview(fic.fic_id).map { |chapter_hash| Chapter.from_overview_hash(chapter_hash, @repo) }
+      chapters_to_pull = chapter_toc.filter { |rr_chapter| !chapters.include?(rr_chapter) }
+
+      fic.apply_fic_info(@client.fic_info(fic.uri.to_s))
+      fic.persist_fic_info
+
+      new_chapters = chapters_to_pull.map { |chapter| @client.enrich_overview_chapter!(chapter).persist }
+      chapters.concat(new_chapters)
+      new_chapters
     end
 
     # Rebuild the combined and per-volume EPUBs for a fic into the repo's build
@@ -140,7 +163,52 @@ module PeasantPath
       results
     end
 
+    def report(hours: 48)
+      cutoff = Time.now - (hours * 3600)
+      entries = @repo.read_pull_log.select { |entry| Time.parse(entry["timestamp"]) >= cutoff }
+      fic_data = report_data_from_entries(entries)
+
+      config.followed_stories.each do |fic_id|
+        next if fic_data.key?(fic_id)
+        fic_data[fic_id] = { title: Fic.from_disk(fic_id, @repo).display_title, runs: [] }
+      end
+
+      sorted = fic_data.sort_by { |_, data| [-data[:runs].sum { |run| run[:new_chapters].length }, data[:title]] }
+      active, quiet = sorted.partition { |_, data| data[:runs].any? { |run| run[:new_chapters].any? || run[:error] } }
+      { active: active, quiet: quiet }
+    end
+
+    def pull_status_by_fic
+      status = {}
+      @repo.read_pull_log.each do |entry|
+        entry["fics"].each do |fic|
+          status[fic["fic_id"]] = {
+            timestamp: entry["timestamp"],
+            error: fic["error"],
+            new_chapter_count: fic["new_chapters"].size,
+          }
+        end
+      end
+      status
+    end
+
     private
+
+    def report_data_from_entries(entries)
+      fic_data = {}
+      entries.each do |entry|
+        time = Time.parse(entry["timestamp"])
+        entry["fics"].each do |fic|
+          fic_data[fic["fic_id"]] ||= { title: fic["title"], runs: [] }
+          fic_data[fic["fic_id"]][:runs] << {
+            time: time,
+            new_chapters: fic["new_chapters"],
+            error: fic["error"],
+          }
+        end
+      end
+      fic_data
+    end
 
     # Validate that +url+ is a RoyalRoad story URL and return its fic ID.
     # Every "this isn't a story URL" case — a malformed string, a non-RoyalRoad

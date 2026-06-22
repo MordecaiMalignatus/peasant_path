@@ -3,6 +3,8 @@ require "fileutils"
 
 module PeasantPath
   class Fic
+    class MissingState < StandardError; end
+
     FIC_ID_REGEX = /https:\/\/www\.royalroad\.com\/fiction\/(\d+)\//
 
     attr_accessor :title, :uri, :author, :description, :display_name, :volumes
@@ -31,43 +33,32 @@ module PeasantPath
       @chapters ? @chapters.size : @repository.list_chapters(@fic_id).size
     end
 
-    # The scraper client is built lazily and only when a fic actually pulls.
-    # Disk-loaded fics used purely for display (the web index, download
-    # filenames) touch no network and so never construct an HTTP client.
-    def rr
-      @rr ||= RoyalRoadClient.new
-    end
-
     def display_title
       @display_name || @title
     end
 
     def self.from_disk(fic_id, repository)
-      begin
-        content = repository.read_fic_info(fic_id)
-        fic = new(fic_id: fic_id, repository: repository)
-        fic.author = content["author"]
-        fic.title = content["title"]
-        fic.description = content["description"]
-        fic.display_name = content["display_name"]
-        fic.volumes = content["volumes"] || []
-      rescue Errno::ENOENT
-        fic = new(fic_id: fic_id, repository: repository)
-        fic.fetch_fic_info
-        fic.persist_fic_info
-      end
+      content = repository.read_fic_info(fic_id)
+      fic = new(fic_id: fic_id, repository: repository)
+      fic.author = content["author"]
+      fic.title = content["title"]
+      fic.description = content["description"]
+      fic.display_name = content["display_name"]
+      fic.volumes = content["volumes"] || []
 
       fic
+    rescue Errno::ENOENT
+      raise MissingState, "Missing fic metadata for #{fic_id}"
     end
 
     def discover_chapters_on_disk
       @repository
         .list_chapters(@fic_id)
         .map { |chapter_file| Chapter.from_disk_content(@repository.read_chapter_from_path(chapter_file), @repository) }
+        .sort_by { |chapter| [chapter.order_number.nil? ? 1 : 0, chapter.order_number || chapter.chapter_id.to_i] }
     end
 
-    def fetch_fic_info
-      info = rr.fic_info(@uri.to_s)
+    def apply_fic_info(info)
       @author = info[:author]
       @title = info[:title]
       @cover_image = info[:cover_image]
@@ -76,19 +67,6 @@ module PeasantPath
       @volume_covers = info[:volume_covers]
 
       self
-    end
-
-    def pull(throttle: false)
-      rr.throttle = throttle
-      @chapters = discover_chapters_on_disk
-      chapter_toc = rr.chapter_overview(@fic_id).map { |chapter_hash| Chapter.from_overview_hash(chapter_hash, @repository) }
-      chapters_to_pull = chapter_toc.filter { |rr_chapter| !@chapters.include?(rr_chapter) }
-      fetch_fic_info
-      persist_fic_info
-
-      new_chapters = chapters_to_pull.map { |c| rr.enrich_overview_chapter!(c).persist }
-      @chapters.concat(new_chapters)
-      new_chapters
     end
 
     # Build from the chapters currently on disk. Does not pull; callers that
@@ -106,9 +84,7 @@ module PeasantPath
     # data — only the metadata JSON is rewritten in that case.
     def persist_fic_info
       chapters = self.chapters.map(&:to_slug)
-      new_state = JSON.pretty_generate({ author: @author, title: @title, display_name: @display_name, description: @description, volumes: @volumes, chapters: chapters })
-
-      @repository.write_fic_info(@fic_id, new_state)
+      @repository.write_fic_info_hash(@fic_id, { schema_version: Config::SCHEMA_VERSION, author: @author, title: @title, display_name: @display_name, description: @description, volumes: @volumes, chapters: chapters })
 
       @repository.write_cover_image(@fic_id, @cover_image) if @cover_image
       @volume_covers&.each do |volume_id, image_data|

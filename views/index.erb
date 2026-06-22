@@ -3,7 +3,7 @@
     <button type="submit"<%= " disabled" if @busy %>>Pull now</button>
   </form>
   <span class="muted">
-    <% if @last_pull %>Last pull: <%= @last_pull %>.<% else %>No pulls yet.<% end %>
+    <% if @last_pull %>Last pull: <%= h(@last_pull) %>.<% else %>No pulls yet.<% end %>
     <% if @busy %> &middot; a pull is running…<% end %>
   </span>
 </div>
@@ -21,24 +21,38 @@
 <% else %>
   <% @stories.each do |row| %>
     <div class="story">
-      <h3><%= row[:fic].display_title %></h3>
+      <h3><%= h(row[:fic].display_title) %></h3>
       <div class="muted">
-        <%= row[:fic].author %> &middot; <%= row[:chapter_count] %> chapters
+        <%= h(row[:fic].author) %> &middot; <%= h(row[:chapter_count]) %> chapters
+        <% if row[:pull_status] %>
+          &middot;
+          last pull: <%= h(Time.parse(row[:pull_status][:timestamp]).strftime("%Y-%m-%d %H:%M")) %>,
+          <% if row[:pull_status][:error] %>
+            error: <%= h(row[:pull_status][:error]) %>
+          <% else %>
+            <%= h(row[:pull_status][:new_chapter_count]) %> new
+          <% end %>
+        <% end %>
         &middot;
         <details class="rename">
           <summary>Rename</summary>
           <form action="/rename" method="post">
-            <input type="hidden" name="fic_id" value="<%= row[:fic].fic_id %>">
+            <input type="hidden" name="fic_id" value="<%= h(row[:fic].fic_id) %>">
             <input type="text" name="name" value="<%= h(row[:fic].display_title) %>" size="30" aria-label="Title">
             <button type="submit" class="small"<%= " disabled" if @busy %>>Rename</button>
           </form>
         </details>
+        &middot;
+        <form action="/unfollow" method="post" class="inline">
+          <input type="hidden" name="fic_id" value="<%= h(row[:fic].fic_id) %>">
+          <button type="submit" class="small">Unfollow</button>
+        </form>
       </div>
       <div class="downloads">
         <% if row[:full_available] %>
-          <a href="/download/<%= row[:fic].fic_id %>">Download (complete)</a>
+          <a href="/download/<%= h(row[:fic].fic_id) %>">Download (complete)</a>
           <% row[:volumes].each_with_index do |vol, i| %>
-            <div class="volume"><span class="branch"><%= i == row[:volumes].size - 1 ? "└" : "├" %></span><a href="/download/<%= row[:fic].fic_id %>/volume/<%= vol[:id] %>"><%= vol[:title] %></a></div>
+            <div class="volume"><span class="branch"><%= i == row[:volumes].size - 1 ? "└" : "├" %></span><a href="/download/<%= h(row[:fic].fic_id) %>/volume/<%= h(vol[:id]) %>"><%= h(vol[:title]) %></a></div>
           <% end %>
         <% else %>
           <span class="pending">build pending</span>

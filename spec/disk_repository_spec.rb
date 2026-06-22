@@ -26,6 +26,27 @@ RSpec.describe PeasantPath::DiskRepository do
     end
   end
 
+  describe "typed JSON writers" do
+    it "writes config JSON" do
+      config = PeasantPath::Config.new(followed_stories: [fic_id])
+      repo.write_config(config)
+
+      expect(repo.read_config_file["followed_stories"]).to eq [fic_id]
+    end
+
+    it "writes fic info hashes" do
+      repo.write_fic_info_hash(fic_id, "title" => "Sky Pride")
+
+      expect(repo.read_fic_info(fic_id)["title"]).to eq "Sky Pride"
+    end
+
+    it "writes chapter hashes" do
+      repo.write_chapter_hash(fic_id, "2113501", "chapter_title" => "Chapter 1")
+
+      expect(repo.read_chapter(fic_id, "2113501")["chapter_title"]).to eq "Chapter 1"
+    end
+  end
+
   describe "#list_chapters" do
     before do
       FileUtils.mkdir_p("#{tmpdir}/#{fic_id}")
@@ -59,6 +80,24 @@ RSpec.describe PeasantPath::DiskRepository do
   end
 
   describe "build storage" do
+    describe "#epub_filename" do
+      it "sanitizes path separators" do
+        expect(repo.epub_filename("Sky/Pride \\ Volume 1")).to eq("Sky Pride Volume 1.epub")
+      end
+
+      it "sanitizes control characters" do
+        expect(repo.epub_filename("Sky\nPride\u0000Vol")).to eq("Sky Pride Vol.epub")
+      end
+
+      it "strips surrounding whitespace" do
+        expect(repo.epub_filename("  Sky Pride  ")).to eq("Sky Pride.epub")
+      end
+
+      it "uses a safe fallback for empty names" do
+        expect(repo.epub_filename(" \n\t ")).to eq("untitled.epub")
+      end
+    end
+
     it "keeps builds outside the fic directory so they aren't seen as chapters" do
       FileUtils.mkdir_p("#{tmpdir}/#{fic_id}")
       File.write("#{tmpdir}/#{fic_id}/2113501", "{}")

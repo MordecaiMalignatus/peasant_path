@@ -12,46 +12,10 @@ module PeasantPath
       "[#{time.strftime("%Y-%m-%dT%H:%M:%S")}] #{severity} #{msg}\n"
     end
 
-    # Serializes the slow pull/build work so a manual "pull now", a
-    # follow-triggered build, and the scheduler never overlap. #run spawns a
-    # background thread and returns false if a job is already in flight. The
-    # boolean flag — not a held mutex — is the guard, so it's always released by
-    # the same thread that set it.
-    class Jobs
-      def initialize(logger = Logger.new($stdout))
-        @logger = logger
-        @lock = Mutex.new
-        @busy = false
-      end
-
-      def busy?
-        @lock.synchronize { @busy }
-      end
-
-      def run
-        @lock.synchronize do
-          return false if @busy
-          @busy = true
-        end
-
-        Thread.new do
-          begin
-            yield
-          rescue => e
-            @logger.error("background job failed: #{e.class}: #{e.message}")
-          ensure
-            @lock.synchronize { @busy = false }
-          end
-        end
-
-        true
-      end
-    end
-
     set :views, File.expand_path("../../views", __dir__)
     set :app_logger, LOGGER
     set :library, Library.new(logger: LOGGER)
-    set :jobs, Jobs.new(LOGGER)
+    set :jobs, PeasantPath::Jobs.new(LOGGER)
     enable :sessions
     set :session_secret, ENV.fetch("PEASANT_PATH_SESSION_SECRET") { SecureRandom.hex(64) }
     # Self-hosted, no-auth tool bound to a host the operator chooses; permit any
@@ -103,10 +67,11 @@ module PeasantPath
       # actually on disk, so the index links only to downloads that exist.
       def story_rows
         repo = library.repo
+        status_by_fic = library.pull_status_by_fic
         library.followed.sort_by { |fic| fic.display_title.downcase }.map do |fic|
-          full = repo.epub_path(fic.fic_id, "#{fic.display_title}.epub")
+          full = repo.epub_path(fic.fic_id, repo.epub_filename(fic.display_title))
           volumes = fic.volumes.filter_map do |vol|
-            path = repo.epub_path(fic.fic_id, "#{fic.display_title} - #{vol["title"]}.epub")
+            path = repo.epub_path(fic.fic_id, repo.epub_filename("#{fic.display_title} - #{vol["title"]}"))
             { id: vol["id"], title: vol["title"] } if File.exist?(path)
           end
           {
@@ -114,6 +79,7 @@ module PeasantPath
             chapter_count: fic.chapter_count,
             full_available: File.exist?(full),
             volumes: volumes,
+            pull_status: status_by_fic[fic.fic_id],
           }
         end
       end
@@ -148,7 +114,7 @@ module PeasantPath
         if result[:followed]
           fic = result[:fic]
           settings.jobs.run do
-            new_chapters = fic.pull
+            new_chapters = library.pull_fic(fic)
             app_logger.info("#{fic.display_title}: #{new_chapters.size} new chapter(s)")
             library.rebuild(fic)
           end
@@ -184,6 +150,15 @@ module PeasantPath
       redirect to("/")
     end
 
+    post "/unfollow" do
+      fic_id = params[:fic_id].to_s
+      halt 404, "Unknown story" unless followed?(fic_id)
+
+      library.unfollow(fic_id)
+      flash! "Unfollowed #{fic_id}. Downloaded files were left on disk."
+      redirect to("/")
+    end
+
     post "/rebuild" do
       started = settings.jobs.run { library.rebuild_all }
       flash!(started ? "Rebuild started." : "A job is already running.")
@@ -193,7 +168,7 @@ module PeasantPath
     get "/download/:fic_id" do |fic_id|
       halt 404, "Unknown story" unless followed?(fic_id)
       fic = Fic.from_disk(fic_id, library.repo)
-      send_epub(fic_id, "#{fic.display_title}.epub")
+      send_epub(fic_id, library.repo.epub_filename(fic.display_title))
     end
 
     get "/download/:fic_id/volume/:volume_id" do |fic_id, volume_id|
@@ -201,7 +176,7 @@ module PeasantPath
       fic = Fic.from_disk(fic_id, library.repo)
       vol = fic.volumes.find { |v| v["id"].to_s == volume_id }
       halt 404, "Unknown volume" unless vol
-      send_epub(fic_id, "#{fic.display_title} - #{vol["title"]}.epub")
+      send_epub(fic_id, library.repo.epub_filename("#{fic.display_title} - #{vol["title"]}"))
     end
   end
 end

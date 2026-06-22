@@ -13,7 +13,8 @@ RSpec.describe PeasantPath::Web do
 
   let(:tmpdir) { Dir.mktmpdir }
   let(:repo) { PeasantPath::DiskRepository.new(tmpdir) }
-  let(:library) { PeasantPath::Library.new(repo: repo) }
+  let(:mock_rr) { instance_double(PeasantPath::RoyalRoadClient) }
+  let(:library) { PeasantPath::Library.new(repo: repo, client: mock_rr) }
   let(:fic_id) { "107917" }
 
   # Records that a background job was requested without spawning a thread or
@@ -65,6 +66,20 @@ RSpec.describe PeasantPath::Web do
       expect(last_response.body).to include("Sky Pride")
     end
 
+    it "escapes dynamic story output" do
+      follow_fic(title: "Sky <script>alert(1)</script>", volumes: [{ "id" => 10395, "title" => "Vol <b>1</b>" }])
+      FileUtils.mkdir_p(repo.build_dir(fic_id))
+      File.write(repo.epub_path(fic_id, repo.epub_filename("Sky <script>alert(1)</script>")), "epub")
+      File.write(repo.epub_path(fic_id, repo.epub_filename("Sky <script>alert(1)</script> - Vol <b>1</b>")), "epub")
+
+      get "/"
+
+      expect(last_response.body).to include("Sky &lt;script&gt;alert(1)&lt;/script&gt;")
+      expect(last_response.body).to include("Vol &lt;b&gt;1&lt;/b&gt;")
+      expect(last_response.body).not_to include("<script>alert(1)</script>")
+      expect(last_response.body).not_to include("Vol <b>1</b>")
+    end
+
     it "shows 'build pending' until an EPUB exists, then a download link" do
       follow_fic
       get "/"
@@ -76,12 +91,22 @@ RSpec.describe PeasantPath::Web do
       expect(last_response.body).to include("/download/#{fic_id}")
       expect(last_response.body).not_to include("build pending")
     end
+
+    it "shows per-story pull status" do
+      follow_fic
+      repo.append_pull_log(timestamp: Time.local(2026, 1, 2, 3, 4, 0).iso8601, fics: [{ fic_id: fic_id, title: "Sky Pride", new_chapters: ["Chapter 1"] }])
+
+      get "/"
+
+      expect(last_response.body).to include("last pull: 2026-01-02 03:04")
+      expect(last_response.body).to include("1 new")
+    end
   end
 
   describe "POST /follow" do
     before do
-      mock_rr = instance_double(PeasantPath::RoyalRoadClient)
-      allow(PeasantPath::RoyalRoadClient).to receive(:new).and_return(mock_rr)
+      allow(mock_rr).to receive(:throttle=)
+      allow(mock_rr).to receive(:chapter_overview).and_return([])
       allow(mock_rr).to receive(:fic_info).and_return(
         title: "Sky Pride", author: "Author", description: "d",
         cover_image: "img", volumes: [], volume_covers: {},
@@ -101,6 +126,14 @@ RSpec.describe PeasantPath::Web do
       expect(last_response.body).to include("is not a RoyalRoad URL")
       expect(library.config.followed_stories).to be_empty
       expect(jobs.runs).to eq 0
+    end
+
+    it "escapes flash messages" do
+      post "/follow", url: "https://example.com/<script>alert(1)</script>"
+      follow_redirect!
+
+      expect(last_response.body).to include("&lt;script&gt;alert(1)&lt;/script&gt;")
+      expect(last_response.body).not_to include("<script>alert(1)</script>")
     end
   end
 
@@ -126,6 +159,21 @@ RSpec.describe PeasantPath::Web do
       post "/rename", fic_id: "999999", name: "Nope"
       expect(last_response.status).to eq 404
       expect(jobs.runs).to eq 0
+    end
+  end
+
+  describe "POST /unfollow" do
+    it "removes the story from followed config" do
+      follow_fic
+      post "/unfollow", fic_id: fic_id
+
+      expect(last_response.status).to eq 302
+      expect(library.config.followed_stories).to be_empty
+    end
+
+    it "404s for a story that is not followed" do
+      post "/unfollow", fic_id: "999999"
+      expect(last_response.status).to eq 404
     end
   end
 

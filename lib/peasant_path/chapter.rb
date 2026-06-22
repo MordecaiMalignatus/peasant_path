@@ -3,6 +3,8 @@ require "json"
 module PeasantPath
   # Represents a singular chapter of a fic.
   class Chapter
+    class InvalidURL < ArgumentError; end
+
     attr_reader :fic_id, :chapter_id, :uri, :repository
     attr_accessor :chapter_title, :chapter_text, :next_chapter, :previous_chapter, :volume_id, :order_number
 
@@ -17,6 +19,8 @@ module PeasantPath
     def initialize(uri, repository)
       @uri = uri
       match = CHAPTER_REGEX.match(uri)
+      raise InvalidURL, "Invalid RoyalRoad chapter URL: #{uri}" unless match
+
       @fic_id = match[1]
       @chapter_id = match[2]
       @repository = repository
@@ -51,10 +55,10 @@ module PeasantPath
     # an upstream edit to an already-pulled chapter is intentionally not picked
     # up. Persisting an existing chapter is therefore a no-op.
     def persist
-      raise "Fetch the chapter before trying to save it to disk." if @chapter_title.nil? || @chapter_text.nil?
+      raise ArgumentError, "Fetch the chapter before trying to save it to disk." if @chapter_title.nil? || @chapter_text.nil?
       return self if @repository.chapter_exists?(@fic_id, @chapter_id)
 
-      body = JSON.pretty_generate({
+      @repository.write_chapter_hash(@fic_id, @chapter_id, {
         fic_id: @fic_id,
         chapter_uri: @uri,
         chapter_title: @chapter_title,
@@ -64,7 +68,6 @@ module PeasantPath
         volume_id: @volume_id,
         order_number: @order_number,
       })
-      @repository.write_chapter(@fic_id, @chapter_id, body)
 
       self
     end

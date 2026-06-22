@@ -22,6 +22,7 @@ RSpec.describe PeasantPath::Epub do
 
   before do
     allow(mock_repo).to receive(:cover_image_path).with("107917").and_return(fic_cover_path)
+    allow(mock_repo).to receive(:epub_filename) { |title| "#{title.to_s.gsub(/[\\\\\/\x00-\x1f\x7f]/, " ").strip.gsub(/[[:space:]]+/, " ")}.epub" }
     allow(mock_book).to receive(:generate_epub) { |path| File.write(path, "epub") }
   end
 
@@ -68,6 +69,16 @@ RSpec.describe PeasantPath::Epub do
 
       expect(Dir.glob(File.join(tmpdir, "*.tmp"))).to be_empty
     end
+
+    it "sanitizes the fic title for the EPUB filename" do
+      allow(mock_fic).to receive(:display_title).and_return("Sky/Pride")
+      epub = described_class.new(mock_fic)
+      allow(described_class).to receive(:compile).and_return(mock_book)
+
+      epub.build(tmpdir)
+
+      expect(File).to exist(File.join(tmpdir, "Sky Pride.epub"))
+    end
   end
 
   describe "#build_volumes" do
@@ -100,6 +111,20 @@ RSpec.describe PeasantPath::Epub do
         epub.build_volumes(tmpdir)
 
         expect(described_class).to have_received(:compile)
+        expect(Dir.children(tmpdir)).to include("Sky Pride - Vol 1.epub")
+      end
+
+      it "sanitizes the volume title for the EPUB filename" do
+        allow(mock_fic).to receive(:chapters).and_return(make_chapters(10, volume_id: 1))
+        allow(mock_fic).to receive(:volumes).and_return([make_volume(id: 1, title: "Vol/1")])
+        allow(mock_repo).to receive(:volume_cover_image_path).with("107917", 1).and_return("/no.jpg")
+        allow(File).to receive(:exist?).with("/no.jpg").and_return(false)
+
+        epub = described_class.new(mock_fic)
+        allow(described_class).to receive(:compile).and_return(mock_book)
+
+        epub.build_volumes(tmpdir)
+
         expect(Dir.children(tmpdir)).to include("Sky Pride - Vol 1.epub")
       end
     end
@@ -182,6 +207,26 @@ RSpec.describe PeasantPath::Epub do
 
       expect(epub).to have_received(:build).with(tmpdir)
       expect(epub).to have_received(:build_volumes).with(tmpdir)
+    end
+  end
+
+  describe ".format_title_page" do
+    it "escapes the title" do
+      xhtml = described_class.format_title_page("Sky <Pride> & \"Glory\"", "img.jpg").read
+
+      expect(xhtml).to include("Sky &lt;Pride&gt; &amp; &quot;Glory&quot;")
+      expect(xhtml).not_to include("<Pride>")
+    end
+  end
+
+  describe ".format_chapter_in_xhtml" do
+    it "escapes the chapter title while preserving chapter HTML" do
+      chapter = instance_double(PeasantPath::Chapter, chapter_title: "Ch <1>", chapter_text: "<p>Content</p>")
+
+      xhtml = described_class.format_chapter_in_xhtml(chapter).read
+
+      expect(xhtml).to include("Ch &lt;1&gt;")
+      expect(xhtml).to include("<p>Content</p>")
     end
   end
 end

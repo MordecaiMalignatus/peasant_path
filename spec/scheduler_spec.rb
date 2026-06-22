@@ -23,6 +23,12 @@ RSpec.describe PeasantPath::Scheduler do
       allow(described_class).to receive(:systemd_timer_active?).and_return(false)
       expect(described_class.mode(env: {})).to eq :internal
     end
+
+    it "raises on unknown override values" do
+      expect {
+        described_class.mode(env: { "PEASANT_PATH_SCHEDULER" => "sometimes" })
+      }.to raise_error(ArgumentError, /Unknown PEASANT_PATH_SCHEDULER/)
+    end
   end
 
   describe ".systemd_timer_active?" do
@@ -65,6 +71,23 @@ RSpec.describe PeasantPath::Scheduler do
       timer = units["peasant-path-pull.timer"]
       expect(timer).to include("OnUnitActiveSec=4h")
       expect(timer).to include("Persistent=true")
+    end
+  end
+
+  describe ".launchd_plist" do
+    it "generates the launchd job for refresh" do
+      plist = described_class.launchd_plist(
+        ruby_path: "/ruby",
+        script_path: "/bin/peasant_path",
+        interval_seconds: 3600,
+        log_dir: "/logs",
+      )
+
+      expect(plist).to include("<string>/ruby</string>")
+      expect(plist).to include("<string>/bin/peasant_path</string>")
+      expect(plist).to include("<string>refresh</string>")
+      expect(plist).to include("<integer>3600</integer>")
+      expect(plist).to include("<string>/logs/peasant_path.log</string>")
     end
   end
 end

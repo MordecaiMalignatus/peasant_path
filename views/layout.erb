@@ -35,7 +35,7 @@
     <h1>Peasant Path</h1>
     <p class="muted issues-note">find an issue?<br><a href="https://github.com/mordecaimalignatus/peasant_path/issues">open an issue.</a></p>
   </header>
-  <% if @flash %><div class="flash"><%= @flash %></div><% end %>
+  <% if @flash %><div class="flash"><%= h(@flash) %></div><% end %>
   <%= yield %>
 </body>
 </html>

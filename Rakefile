@@ -1,3 +1,5 @@
+require_relative "lib/peasant_path/version"
+
 task default: :test
 
 task :test do
@@ -8,9 +10,9 @@ task :build do
   sh "bundle exec peasant_path build 107917"
 end
 
-task :install do 
-  sh 'bundle exec gem build ./peasant_path.gemspec'
-  sh 'gem install ./peasant_path-0.1.0.gem'
+task :install do
+  sh "bundle exec gem build ./peasant_path.gemspec"
+  sh "gem install ./peasant_path-#{PeasantPath::VERSION}.gem"
 end
 
 task :reset do

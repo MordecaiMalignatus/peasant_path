@@ -19,9 +19,38 @@ module PeasantPath
       when "off" then :off
       when "internal" then :internal
       when "external" then :external
+      when nil, "" then systemd_timer_active? ? :external : :internal
       else
-        systemd_timer_active? ? :external : :internal
+        raise ArgumentError, "Unknown PEASANT_PATH_SCHEDULER value: #{env["PEASANT_PATH_SCHEDULER"]}"
       end
+    end
+
+    def self.launchd_plist(ruby_path:, script_path:, interval_seconds:, log_dir:)
+      <<~XML
+        <?xml version="1.0" encoding="UTF-8"?>
+        <!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+        <plist version="1.0">
+        <dict>
+          <key>Label</key>
+          <string>com.peasant_path.pull</string>
+          <key>ProgramArguments</key>
+          <array>
+            <string>#{ruby_path}</string>
+            <string>#{script_path}</string>
+            <string>refresh</string>
+            <string>--throttle</string>
+          </array>
+          <key>StartInterval</key>
+          <integer>#{interval_seconds}</integer>
+          <key>RunAtLoad</key>
+          <false/>
+          <key>StandardOutPath</key>
+          <string>#{log_dir}/peasant_path.log</string>
+          <key>StandardErrorPath</key>
+          <string>#{log_dir}/peasant_path.error.log</string>
+        </dict>
+        </plist>
+      XML
     end
 
     # True only when booted under systemd and the pull timer is active, so we

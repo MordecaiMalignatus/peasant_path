@@ -12,7 +12,7 @@ module PeasantPath
     def ensure_config_file
       return if File.exist?(config_path)
       FileUtils.mkdir_p(@root_path)
-      File.write(config_path, "{}")
+      atomic_write(config_path, "{}")
     end
 
     # String keys, matching read_fic_info and read_pull_log: every JSON read in
@@ -24,7 +24,11 @@ module PeasantPath
     end
 
     def write_config_file(content)
-      File.write(config_path, content)
+      atomic_write(config_path, content)
+    end
+
+    def write_config(config)
+      write_config_file(config.to_json)
     end
 
     def read_chapter_from_path(path)
@@ -39,7 +43,11 @@ module PeasantPath
 
     def write_chapter(fic_id, chapter_id, content)
       FileUtils.mkdir_p(fic_dir(fic_id))
-      File.write(File.join(fic_dir(fic_id), chapter_id), content)
+      atomic_write(File.join(fic_dir(fic_id), chapter_id), content)
+    end
+
+    def write_chapter_hash(fic_id, chapter_id, hash)
+      write_chapter(fic_id, chapter_id, JSON.pretty_generate(hash))
     end
 
     def chapter_exists?(fic_id, chapter_id)
@@ -58,7 +66,7 @@ module PeasantPath
 
     def write_volume_cover_image(fic_id, volume_id, content)
       FileUtils.mkdir_p(fic_dir(fic_id))
-      File.write(volume_cover_image_path(fic_id, volume_id), content)
+      atomic_write(volume_cover_image_path(fic_id, volume_id), content)
     end
 
     def read_volume_cover_image(fic_id, volume_id)
@@ -71,7 +79,11 @@ module PeasantPath
 
     def write_fic_info(fic_id, content)
       FileUtils.mkdir_p(fic_dir(fic_id))
-      File.write(File.join(fic_dir(fic_id), "fic_info.json"), content)
+      atomic_write(File.join(fic_dir(fic_id), "fic_info.json"), content)
+    end
+
+    def write_fic_info_hash(fic_id, hash)
+      write_fic_info(fic_id, JSON.pretty_generate(hash))
     end
 
     def cover_image_path(fic_id)
@@ -80,7 +92,7 @@ module PeasantPath
 
     def write_cover_image(fic_id, content)
       FileUtils.mkdir_p(fic_dir(fic_id))
-      File.write(cover_image_path(fic_id), content)
+      atomic_write(cover_image_path(fic_id), content)
     end
 
     def pull_log_path
@@ -108,6 +120,16 @@ module PeasantPath
       File.join(build_dir(fic_id), filename)
     end
 
+    def epub_filename(title)
+      "#{sanitize_filename(title)}.epub"
+    end
+
+    def sanitize_filename(name)
+      sanitized = name.to_s.gsub(/[\\\/\x00-\x1f\x7f]/, " ").strip
+      sanitized = sanitized.gsub(/[[:space:]]+/, " ")
+      sanitized.empty? ? "untitled" : sanitized
+    end
+
     def list_builds(fic_id)
       Dir.glob(File.join(build_dir(fic_id), "*.epub")).sort
     end
@@ -133,6 +155,14 @@ module PeasantPath
 
     def fic_dir(fic_id)
       File.join(@root_path, fic_id)
+    end
+
+    def atomic_write(path, content)
+      tmp = "#{path}.tmp.#{$PROCESS_ID}"
+      File.write(tmp, content)
+      File.rename(tmp, path)
+    ensure
+      FileUtils.rm_f(tmp) if tmp && File.exist?(tmp)
     end
   end
 end

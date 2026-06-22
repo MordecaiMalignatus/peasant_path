@@ -1,5 +1,6 @@
 require "json"
 require "fileutils"
+require "cgi"
 require "gepub"
 require "nokogiri"
 
@@ -16,7 +17,7 @@ module PeasantPath
     # Build the combined EPUB into +dir+ (defaults to the current working
     # directory, preserving the CLI's behaviour). Returns the written path.
     def build(dir = Dir.pwd)
-      generate(dir, "#{@fic.display_title}.epub", Epub.compile(
+      generate(dir, @fic.repository.epub_filename(@fic.display_title), Epub.compile(
         title: @fic.display_title,
         author: @fic.author,
         cover_path: @fic.repository.cover_image_path(@fic.fic_id),
@@ -36,7 +37,7 @@ module PeasantPath
     def build_volumes(dir = Dir.pwd)
       non_stub_volumes.each do |vol|
         vol_title = "#{@fic.display_title} - #{vol["title"]}"
-        generate(dir, "#{vol_title}.epub", Epub.compile(
+        generate(dir, @fic.repository.epub_filename(vol_title), Epub.compile(
           title: vol_title,
           author: @fic.author,
           cover_path: volume_cover_path(vol["id"]),
@@ -71,13 +72,14 @@ module PeasantPath
     end
 
     def self.format_title_page(title, cover_image_path)
+      escaped_title = h(title)
       StringIO.new(<<~TEXT)
         <html xmlns="http://www.w3.org/1999/xhtml">
         <head>
-          <title>#{title}</title>
+          <title>#{escaped_title}</title>
          </head>
          <body>
-         <h1>#{title}</h1>
+         <h1>#{escaped_title}</h1>
          <img src="../#{cover_image_path}" />
          </body></html>
       TEXT
@@ -86,14 +88,19 @@ module PeasantPath
     def self.format_chapter_in_xhtml(chapter)
       fragment = Nokogiri::HTML.fragment(chapter.chapter_text)
       fragment.css("p").each { |el| el.remove if el.text.strip == " " }
+      escaped_title = h(chapter.chapter_title)
 
       StringIO.new(<<~TEXT)
         <html xmlns="http://www.w3.org/1999/xhtml">
-        <head><title>#{chapter.chapter_title}</title></head>
+        <head><title>#{escaped_title}</title></head>
         <body>
-        <h2>#{chapter.chapter_title}</h2>
+        <h2>#{escaped_title}</h2>
         #{fragment.to_xhtml}</body></html>
       TEXT
+    end
+
+    def self.h(text)
+      CGI.escapeHTML(text.to_s)
     end
 
     private

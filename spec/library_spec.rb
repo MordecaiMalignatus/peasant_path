@@ -4,8 +4,8 @@ require "tmpdir"
 RSpec.describe PeasantPath::Library do
   let(:tmpdir) { Dir.mktmpdir }
   let(:repo) { PeasantPath::DiskRepository.new(tmpdir) }
-  let(:library) { described_class.new(repo: repo) }
   let(:mock_rr) { instance_double(PeasantPath::RoyalRoadClient) }
+  let(:library) { described_class.new(repo: repo, client: mock_rr) }
   let(:fic_id) { "107917" }
   let(:url) { "https://www.royalroad.com/fiction/107917/sky-pride" }
 
@@ -28,7 +28,6 @@ RSpec.describe PeasantPath::Library do
   end
 
   before do
-    allow(PeasantPath::RoyalRoadClient).to receive(:new).and_return(mock_rr)
     allow(mock_rr).to receive(:fic_info).and_return(fic_info)
   end
 
@@ -168,6 +167,54 @@ RSpec.describe PeasantPath::Library do
       expect(File).to exist(repo.epub_path(fic_id, "New Title.epub"))
       expect(File).to exist(repo.epub_path(fic_id, "New Title - Volume 1.epub"))
       expect(File).not_to exist(repo.epub_path(fic_id, "Sky Pride.epub"))
+    end
+  end
+
+  describe "#unfollow" do
+    it "removes the fic from config without deleting files" do
+      library.follow(url)
+      repo.write_chapter_hash(fic_id, "2113501", {
+        fic_id: fic_id,
+        chapter_uri: "https://www.royalroad.com/fiction/107917/sky-pride/chapter/2113501/chapter-1",
+        chapter_title: "Chapter 1",
+        chapter_text: "<p>text</p>",
+      })
+
+      expect(library.unfollow(fic_id)).to be true
+
+      expect(library.config.followed_stories).to be_empty
+      expect(repo.chapter_exists?(fic_id, "2113501")).to be true
+    end
+
+    it "returns false for a fic that was not followed" do
+      expect(library.unfollow(fic_id)).to be false
+    end
+  end
+
+  describe "#report" do
+    it "returns active and quiet report rows" do
+      library.follow(url)
+      repo.append_pull_log(
+        timestamp: Time.now.iso8601,
+        fics: [{ fic_id: fic_id, title: "Sky Pride", new_chapters: ["Chapter 1"] }],
+      )
+
+      report = library.report(hours: 1)
+
+      expect(report[:active].first.last[:title]).to eq "Sky Pride"
+      expect(report[:quiet]).to be_empty
+    end
+  end
+
+  describe "#pull_status_by_fic" do
+    it "returns the latest pull status for each fic" do
+      repo.append_pull_log(timestamp: (Time.now - 60).iso8601, fics: [{ fic_id: fic_id, title: "Sky Pride", new_chapters: [] }])
+      repo.append_pull_log(timestamp: Time.now.iso8601, fics: [{ fic_id: fic_id, title: "Sky Pride", new_chapters: ["Chapter 1"], error: "boom" }])
+
+      status = library.pull_status_by_fic[fic_id]
+
+      expect(status[:new_chapter_count]).to eq 1
+      expect(status[:error]).to eq "boom"
     end
   end
 

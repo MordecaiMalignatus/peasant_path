@@ -29,7 +29,7 @@ RSpec.describe PeasantPath::RoyalRoadClient do
   describe "#fic_info" do
     before do
       allow(PeasantPath::RoyalRoadClient).to receive(:get).and_return(
-        double(body: sky_pride_html)
+        double(code: 200, body: sky_pride_html)
       )
       allow(client).to receive(:download_picture).and_return("mock_image_data")
     end
@@ -99,7 +99,7 @@ RSpec.describe PeasantPath::RoyalRoadClient do
   describe "#chapter_overview" do
     before do
       allow(PeasantPath::RoyalRoadClient).to receive(:get).with("/fiction/107917/").and_return(
-        double(body: sky_pride_html)
+        double(code: 200, body: sky_pride_html)
       )
     end
 
@@ -140,7 +140,7 @@ RSpec.describe PeasantPath::RoyalRoadClient do
 
   describe "scraping guard rails" do
     it "raises a named ScrapeError when window.volumes is missing from fic_info" do
-      allow(PeasantPath::RoyalRoadClient).to receive(:get).and_return(double(body: "<html>rate limited</html>"))
+      allow(PeasantPath::RoyalRoadClient).to receive(:get).and_return(double(code: 200, body: "<html>rate limited</html>"))
       allow(client).to receive(:download_picture).and_return("x")
 
       expect {
@@ -150,12 +150,32 @@ RSpec.describe PeasantPath::RoyalRoadClient do
 
     it "raises a named ScrapeError when window.chapters is missing from chapter_overview" do
       allow(PeasantPath::RoyalRoadClient).to receive(:get).with("/fiction/107917/").and_return(
-        double(body: "<html>error page</html>")
+        double(code: 200, body: "<html>error page</html>")
       )
 
       expect {
         client.chapter_overview(107917)
       }.to raise_error(PeasantPath::RoyalRoadClient::ScrapeError, /fiction 107917.*window\.chapters/m)
+    end
+
+    it "raises a named ScrapeError when RoyalRoad returns 429" do
+      allow(PeasantPath::RoyalRoadClient).to receive(:get).with("/fiction/107917/").and_return(
+        double(code: 429, body: "rate limited")
+      )
+
+      expect {
+        client.chapter_overview(107917)
+      }.to raise_error(PeasantPath::RoyalRoadClient::ScrapeError, /429 Too Many Requests/)
+    end
+
+    it "raises a named ScrapeError when RoyalRoad returns a server error" do
+      allow(PeasantPath::RoyalRoadClient).to receive(:get).with("/fiction/107917/").and_return(
+        double(code: 503, body: "unavailable")
+      )
+
+      expect {
+        client.chapter_overview(107917)
+      }.to raise_error(PeasantPath::RoyalRoadClient::ScrapeError, /503 server error/)
     end
   end
 
@@ -174,7 +194,7 @@ RSpec.describe PeasantPath::RoyalRoadClient do
 
       expect {
         client.download_picture("https://example.com/missing.jpg")
-      }.to raise_error(/cover_image: got unexpected response code/)
+      }.to raise_error(PeasantPath::RoyalRoadClient::ScrapeError, /cover_image: got unexpected response code/)
     end
   end
 end

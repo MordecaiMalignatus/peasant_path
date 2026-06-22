@@ -28,9 +28,10 @@ module PeasantPath
 
     def fic_info(uri)
       toc = self.class.get(uri)
+      ensure_success!(toc, "fic page #{uri}")
       doc = Nokogiri::HTML(toc.body)
       volumes_json = extract_js_assignment(toc.body, "window.volumes", context: uri)
-      volumes = JSON.load(volumes_json)
+      volumes = JSON.parse(volumes_json)
 
       cover_attr = doc.css(".fic-header").css("img").attribute("src")
       if cover_attr.nil?
@@ -56,6 +57,7 @@ module PeasantPath
     # nicked from the JS of the rendered HTML.
     def chapter_overview(id)
       toc = self.class.get("/fiction/#{id}/")
+      ensure_success!(toc, "chapter overview #{id}")
       # There's an embedded script tag that assigns the chapters loaded to the
       # `window.chapters` variable, to render the page without needing to make
       # another API request. The SPA takes this and builds the UI. Extracting
@@ -64,14 +66,15 @@ module PeasantPath
       # it via string manipulation :v
       extracted_json = extract_js_assignment(toc.body, "window.chapters", context: "fiction #{id}")
 
-      JSON.load(extracted_json)
+      JSON.parse(extracted_json)
     end
 
     def enrich_overview_chapter!(overview_chapter)
-      raise if overview_chapter.uri.nil?
+      raise ArgumentError, "Chapter URI is required" if overview_chapter.uri.nil?
 
       sleep(rand(5..15)) if @throttle
       resp = self.class.get(overview_chapter.uri)
+      ensure_success!(resp, "chapter #{overview_chapter.uri}")
       doc = Nokogiri::HTML(resp.body)
       nav_buttons = doc.css(".nav-buttons").css(".btn")
 
@@ -96,7 +99,7 @@ module PeasantPath
       if resp.code != 200
         # Report only the status, not resp.inspect, which would dump the whole
         # response body into the message/log.
-        raise "cover_image: got unexpected response code #{resp.code} from the CDN for #{url}"
+        raise ScrapeError, "cover_image: got unexpected response code #{resp.code} from the CDN for #{url}"
       end
       resp.body
     end
@@ -114,6 +117,19 @@ module PeasantPath
       end
 
       line.strip.delete_prefix("#{var_name} = ").delete_suffix(";")
+    end
+
+    def ensure_success!(response, context)
+      return if response.code == 200
+
+      case response.code
+      when 429
+        raise ScrapeError, "#{context}: RoyalRoad returned 429 Too Many Requests"
+      when 500..599
+        raise ScrapeError, "#{context}: RoyalRoad returned #{response.code} server error"
+      else
+        raise ScrapeError, "#{context}: RoyalRoad returned HTTP #{response.code}"
+      end
     end
   end
 end

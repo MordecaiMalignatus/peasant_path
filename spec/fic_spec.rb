@@ -2,7 +2,6 @@ require "peasant_path"
 
 RSpec.describe PeasantPath::Fic do
   let(:mock_repo) { instance_double(PeasantPath::DiskRepository) }
-  let(:mock_rr) { instance_double(PeasantPath::RoyalRoadClient) }
   let(:fic_id) { "107917" }
 
   let(:chapter_uri_1) { "https://www.royalroad.com/fiction/107917/sky-pride/chapter/2113501/chapter-1--in-the-care-of-a-hateful-god" }
@@ -15,7 +14,7 @@ RSpec.describe PeasantPath::Fic do
       "chapter_title" => "Chapter 1- In the Care of a Hateful God",
       "chapter_text" => "<p>Content</p>",
       "next_chapter" => "/fiction/107917/sky-pride/chapter/2113560/chapter-2--gourmet-in-the-garbage",
-      "previous_chapter" => nil
+      "previous_chapter" => nil,
     }
   end
 
@@ -26,28 +25,72 @@ RSpec.describe PeasantPath::Fic do
       "chapter_title" => "Chapter 2- Gourmet in the Garbage",
       "chapter_text" => "<p>Content</p>",
       "next_chapter" => nil,
-      "previous_chapter" => "/fiction/107917/sky-pride/chapter/2113501/chapter-1--in-the-care-of-a-hateful-god"
+      "previous_chapter" => "/fiction/107917/sky-pride/chapter/2113501/chapter-1--in-the-care-of-a-hateful-god",
     }
   end
 
-  let(:overview) do
-    [
-      { "id" => 2113501, "volumeId" => 10395, "order" => 0, "title" => "Chapter 1- In the Care of a Hateful God", "url" => "/fiction/107917/sky-pride/chapter/2113501/chapter-1--in-the-care-of-a-hateful-god" },
-      { "id" => 2113560, "volumeId" => 10395, "order" => 1, "title" => "Chapter 2- Gourmet in the Garbage", "url" => "/fiction/107917/sky-pride/chapter/2113560/chapter-2--gourmet-in-the-garbage" }
-    ]
-  end
+  describe ".from_disk" do
+    it "loads persisted metadata" do
+      allow(mock_repo).to receive(:read_fic_info).with(fic_id).and_return(
+        "author" => "Author",
+        "title" => "Sky Pride",
+        "description" => "A story",
+        "display_name" => "My Sky Pride",
+        "volumes" => [{ "id" => 1, "title" => "Vol 1" }],
+      )
 
-  def build_fic_with_chapters(chapters_on_disk)
-    allow(mock_repo).to receive(:list_chapters).with(fic_id).and_return(
-      chapters_on_disk.map { |c| "/config/#{fic_id}/#{c["chapter_uri"].split("/").last(2).first}" }
-    )
-    chapters_on_disk.each do |c|
-      path = "/config/#{fic_id}/#{c["chapter_uri"].split("/").last(2).first}"
-      allow(mock_repo).to receive(:read_chapter_from_path).with(path).and_return(c)
+      fic = described_class.from_disk(fic_id, mock_repo)
+
+      expect(fic.author).to eq "Author"
+      expect(fic.title).to eq "Sky Pride"
+      expect(fic.description).to eq "A story"
+      expect(fic.display_name).to eq "My Sky Pride"
+      expect(fic.volumes).to eq [{ "id" => 1, "title" => "Vol 1" }]
     end
 
-    fic = described_class.new(fic_id: fic_id, repository: mock_repo)
-    fic.instance_variable_set(:@rr, mock_rr)
-    fic
+    it "raises a clear error when metadata is missing" do
+      allow(mock_repo).to receive(:read_fic_info).with(fic_id).and_raise(Errno::ENOENT)
+
+      expect { described_class.from_disk(fic_id, mock_repo) }.to raise_error(described_class::MissingState, /#{fic_id}/)
+    end
+  end
+
+  describe "#chapters" do
+    it "loads chapters lazily from disk" do
+      path = "/config/#{fic_id}/2113501"
+      allow(mock_repo).to receive(:list_chapters).with(fic_id).and_return([path])
+      allow(mock_repo).to receive(:read_chapter_from_path).with(path).and_return(old_chapter_1_disk)
+
+      fic = described_class.new(fic_id: fic_id, repository: mock_repo)
+
+      expect(mock_repo).not_to have_received(:list_chapters)
+      expect(fic.chapters.map(&:chapter_id)).to eq ["2113501"]
+      expect(fic.chapters.map(&:chapter_id)).to eq ["2113501"]
+      expect(mock_repo).to have_received(:list_chapters).once
+    end
+
+    it "sorts chapters by order number, falling back to chapter id" do
+      path_1 = "/config/#{fic_id}/2113501"
+      path_2 = "/config/#{fic_id}/2113560"
+      chapter_1 = old_chapter_1_disk.merge("order_number" => 1)
+      chapter_2 = old_chapter_2_disk.merge("order_number" => 0)
+      allow(mock_repo).to receive(:list_chapters).with(fic_id).and_return([path_1, path_2])
+      allow(mock_repo).to receive(:read_chapter_from_path).with(path_1).and_return(chapter_1)
+      allow(mock_repo).to receive(:read_chapter_from_path).with(path_2).and_return(chapter_2)
+
+      fic = described_class.new(fic_id: fic_id, repository: mock_repo)
+
+      expect(fic.chapters.map(&:chapter_id)).to eq ["2113560", "2113501"]
+    end
+  end
+
+  describe "#display_title" do
+    it "prefers display_name over title" do
+      fic = described_class.new(fic_id: fic_id, repository: mock_repo)
+      fic.title = "Sky Pride"
+      fic.display_name = "My Sky Pride"
+
+      expect(fic.display_title).to eq "My Sky Pride"
+    end
   end
 end
