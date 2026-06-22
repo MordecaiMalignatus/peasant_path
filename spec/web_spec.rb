@@ -48,9 +48,20 @@ RSpec.describe PeasantPath::Web do
     FileUtils.rm_rf(tmpdir)
   end
 
-  def follow_fic(title: "Sky Pride", volumes: [])
+  def follow_fic(title: "Sky Pride", volumes: [], stats: nil)
     repo.write_config_file(JSON.generate(followed_stories: [fic_id]))
-    repo.write_fic_info(fic_id, JSON.generate(title: title, author: "Author", volumes: volumes))
+    info = { title: title, author: "Author", volumes: volumes }
+    info[:stats] = stats if stats
+    repo.write_fic_info(fic_id, JSON.generate(info))
+  end
+
+  def write_chapter(chapter_id, text)
+    repo.write_chapter_hash(fic_id, chapter_id, {
+      fic_id: fic_id,
+      chapter_uri: "https://www.royalroad.com/fiction/#{fic_id}/sky-pride/chapter/#{chapter_id}/chapter",
+      chapter_title: "Chapter #{chapter_id}",
+      chapter_text: text,
+    })
   end
 
   describe "GET /" do
@@ -98,8 +109,47 @@ RSpec.describe PeasantPath::Web do
 
       get "/"
 
-      expect(last_response.body).to include("last pull: 2026-01-02 03:04")
+      expect(last_response.body).to include("last pull: 2026-01-02")
+      expect(last_response.body).not_to include("last pull: 2026-01-02 03:04")
       expect(last_response.body).to include("1 new")
+    end
+
+    it "shows rough word counts from persisted fic and volume stats" do
+      follow_fic(
+        stats: { "word_count_estimate" => 1_249 },
+        volumes: [{ "id" => 10395, "title" => "Volume 1", "word_count_estimate" => 10_600 }],
+      )
+      FileUtils.mkdir_p(repo.build_dir(fic_id))
+      File.write(repo.epub_path(fic_id, "Sky Pride.epub"), "epub")
+      File.write(repo.epub_path(fic_id, "Sky Pride - Volume 1.epub"), "epub")
+
+      get "/"
+
+      expect(last_response.body).to include("~1,200 words")
+      expect(last_response.body).to include("~11,000 words")
+    end
+
+    it "renders no word-count text when persisted stats are absent" do
+      follow_fic
+      FileUtils.mkdir_p(repo.build_dir(fic_id))
+      File.write(repo.epub_path(fic_id, "Sky Pride.epub"), "epub")
+
+      get "/"
+
+      expect(last_response.body).not_to include("words")
+      expect(last_response.body).not_to include("word count pending")
+    end
+
+    it "does not read chapter contents for word-count stats" do
+      follow_fic(stats: { "word_count_estimate" => 1_249 })
+      write_chapter("2113501", "<p>#{Array.new(50_000, "word").join(" ")}</p>")
+      allow(repo).to receive(:read_chapter_from_path).and_raise("chapter contents should not be read")
+      allow(repo).to receive(:read_chapter).and_raise("chapter contents should not be read")
+
+      get "/"
+
+      expect(last_response).to be_ok
+      expect(last_response.body).to include("~1,200 words")
     end
   end
 

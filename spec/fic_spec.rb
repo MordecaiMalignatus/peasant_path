@@ -36,6 +36,7 @@ RSpec.describe PeasantPath::Fic do
         "title" => "Sky Pride",
         "description" => "A story",
         "display_name" => "My Sky Pride",
+        "stats" => { "word_count_estimate" => 123, "chapter_count" => 2, "updated_at" => "2026-06-22T12:34:56Z" },
         "volumes" => [{ "id" => 1, "title" => "Vol 1" }],
       )
 
@@ -46,6 +47,20 @@ RSpec.describe PeasantPath::Fic do
       expect(fic.description).to eq "A story"
       expect(fic.display_name).to eq "My Sky Pride"
       expect(fic.volumes).to eq [{ "id" => 1, "title" => "Vol 1" }]
+      expect(fic.stats["word_count_estimate"]).to eq 123
+    end
+
+    it "loads metadata without stats cleanly" do
+      allow(mock_repo).to receive(:read_fic_info).with(fic_id).and_return(
+        "author" => "Author",
+        "title" => "Sky Pride",
+        "volumes" => [],
+      )
+
+      fic = described_class.from_disk(fic_id, mock_repo)
+
+      expect(fic.stats).to be_nil
+      expect(fic.word_count_estimate).to be_nil
     end
 
     it "raises a clear error when metadata is missing" do
@@ -91,6 +106,51 @@ RSpec.describe PeasantPath::Fic do
       fic.display_name = "My Sky Pride"
 
       expect(fic.display_title).to eq "My Sky Pride"
+    end
+  end
+
+  describe "#word_count_estimate" do
+    it "reads persisted fic-level stats" do
+      fic = described_class.new(fic_id: fic_id, repository: mock_repo)
+      fic.stats = { "word_count_estimate" => 5 }
+
+      expect(fic.word_count_estimate).to eq 5
+    end
+  end
+
+  describe "#refresh_stats!" do
+    it "writes fic-level totals" do
+      path_1 = "/config/#{fic_id}/2113501"
+      path_2 = "/config/#{fic_id}/2113560"
+      allow(mock_repo).to receive(:list_chapters).with(fic_id).and_return([path_1, path_2])
+      allow(mock_repo).to receive(:read_chapter_from_path).with(path_1).and_return(old_chapter_1_disk.merge("chapter_text" => "<p>One two, three.</p>", "volume_id" => 10395, "order_number" => 0))
+      allow(mock_repo).to receive(:read_chapter_from_path).with(path_2).and_return(old_chapter_2_disk.merge("chapter_text" => "<p>Four-five six's</p>", "volume_id" => 10395, "order_number" => 1))
+      allow(mock_repo).to receive(:write_fic_info_hash)
+
+      fic = described_class.new(fic_id: fic_id, repository: mock_repo)
+      fic.title = "Sky Pride"
+      fic.volumes = [{ "id" => 10395, "title" => "Volume 1" }]
+      fic.refresh_stats!
+
+      expect(mock_repo).to have_received(:write_fic_info_hash).with(fic_id, hash_including(stats: hash_including("word_count_estimate" => 6, "chapter_count" => 2, "updated_at" => kind_of(String))))
+    end
+
+    it "writes per-volume chapter_count, chapter_ids, and word_count_estimate" do
+      path_1 = "/config/#{fic_id}/2113501"
+      path_2 = "/config/#{fic_id}/2113560"
+      allow(mock_repo).to receive(:list_chapters).with(fic_id).and_return([path_1, path_2])
+      allow(mock_repo).to receive(:read_chapter_from_path).with(path_1).and_return(old_chapter_1_disk.merge("chapter_text" => "<p>One two three.</p>", "volume_id" => 10395, "order_number" => 0))
+      allow(mock_repo).to receive(:read_chapter_from_path).with(path_2).and_return(old_chapter_2_disk.merge("chapter_text" => "<p>Four five.</p>", "volume_id" => 10397, "order_number" => 1))
+      allow(mock_repo).to receive(:write_fic_info_hash)
+
+      fic = described_class.new(fic_id: fic_id, repository: mock_repo)
+      fic.volumes = [{ "id" => 10395, "title" => "Volume 1" }, { "id" => 10397, "title" => "Volume 2" }]
+      fic.refresh_stats!
+
+      expect(fic.volumes).to eq([
+        { "id" => 10395, "title" => "Volume 1", "word_count_estimate" => 3, "chapter_count" => 1, "chapter_ids" => ["2113501"] },
+        { "id" => 10397, "title" => "Volume 2", "word_count_estimate" => 2, "chapter_count" => 1, "chapter_ids" => ["2113560"] },
+      ])
     end
   end
 end

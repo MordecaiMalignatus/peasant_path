@@ -7,7 +7,7 @@ Gem::Specification.new do |spec|
   spec.version = PeasantPath::VERSION
   spec.authors = ["MordecaiMalignatus"]
   spec.summary = "Download web fiction from RoyalRoad.com and convert to EPUB"
-  spec.required_ruby_version = ">= 3.0"
+  spec.required_ruby_version = ">= 3.2"
 
   spec.files = Dir["lib/**/*.rb", "bin/*", "views/**/*", "config.ru"]
   spec.bindir = "bin"
@@ -15,6 +15,7 @@ Gem::Specification.new do |spec|
   spec.require_paths = ["lib"]
 
   spec.add_dependency "nokogiri", "~> 1.19"
+  spec.add_dependency "ffi-icu", "~> 0.6"
   spec.add_dependency "httparty", "~> 0.24.0"
   spec.add_dependency "gepub", "~> 2.0"
   spec.add_dependency "thor", "~> 1.3"

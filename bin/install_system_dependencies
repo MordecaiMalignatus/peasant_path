@@ -1,0 +1,48 @@
+#!/usr/bin/env bash
+set -euo pipefail
+
+usage() {
+  printf 'Usage: %s\n\nInstalls ICU system libraries required by ffi-icu on Ubuntu or macOS.\n' "$0"
+}
+
+if [[ "${1:-}" == "--help" || "${1:-}" == "-h" ]]; then
+  usage
+  exit 0
+fi
+
+case "$(uname -s)" in
+  Darwin)
+    if ! command -v brew >/dev/null 2>&1; then
+      printf 'Homebrew is required on macOS: https://brew.sh\n' >&2
+      exit 1
+    fi
+
+    brew install icu4c@78
+    icu_prefix="$(brew --prefix icu4c@78)"
+
+    printf '\nICU installed at %s\n' "$icu_prefix"
+    printf 'For this shell, run:\n'
+    printf '  export FFI_ICU_LIB="%s/lib"\n' "$icu_prefix"
+    printf '  export DYLD_FALLBACK_LIBRARY_PATH="%s/lib:${DYLD_FALLBACK_LIBRARY_PATH:-}"\n' "$icu_prefix"
+    ;;
+  Linux)
+    if [[ -r /etc/os-release ]]; then
+      # shellcheck disable=SC1091
+      . /etc/os-release
+    fi
+
+    if [[ "${ID:-}" != "ubuntu" && "${ID_LIKE:-}" != *ubuntu* && "${ID_LIKE:-}" != *debian* ]]; then
+      printf 'This script supports Ubuntu/Debian-like Linux systems. Install ICU development headers manually.\n' >&2
+      exit 1
+    fi
+
+    sudo apt-get update
+    sudo apt-get install -y libicu-dev
+    ;;
+  *)
+    printf 'Unsupported OS: %s\n' "$(uname -s)" >&2
+    exit 1
+    ;;
+esac
+
+printf '\nSystem dependencies installed. Run bundle install next.\n'

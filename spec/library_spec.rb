@@ -101,6 +101,19 @@ RSpec.describe PeasantPath::Library do
       expect(log.first["fics"].first["new_chapters"]).to contain_exactly("Title 2113501", "Title 2113560")
     end
 
+    it "updates stats after chapter persistence" do
+      library.pull_all
+      info = repo.read_fic_info(fic_id)
+
+      expect(repo.read_chapter(fic_id, "2113501")["word_count_estimate"]).to eq 1
+      expect(info["stats"]).to include("word_count_estimate" => 2, "chapter_count" => 2)
+      expect(info["volumes"].first).to include(
+        "word_count_estimate" => 2,
+        "chapter_count" => 2,
+        "chapter_ids" => ["2113501", "2113560"],
+      )
+    end
+
     it "captures per-fic errors instead of raising" do
       allow(mock_rr).to receive(:chapter_overview).and_raise("network down")
       results = library.pull_all
@@ -116,6 +129,7 @@ RSpec.describe PeasantPath::Library do
       unchanged = instance_double(PeasantPath::Fic, fic_id: "2")
       changed_book = instance_double(PeasantPath::Epub)
       allow(changed).to receive(:book).and_return(changed_book)
+      allow(changed).to receive(:refresh_stats!)
       allow(changed_book).to receive(:build_all)
       allow(unchanged).to receive(:book)
 
@@ -125,6 +139,7 @@ RSpec.describe PeasantPath::Library do
       ])
 
       expect(changed_book).to have_received(:build_all).with(repo.build_dir("1"))
+      expect(changed).to have_received(:refresh_stats!)
       expect(unchanged).not_to have_received(:book)
     end
   end

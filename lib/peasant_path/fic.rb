@@ -1,5 +1,6 @@
 require "json"
 require "fileutils"
+require "time"
 
 module PeasantPath
   class Fic
@@ -7,7 +8,7 @@ module PeasantPath
 
     FIC_ID_REGEX = /https:\/\/www\.royalroad\.com\/fiction\/(\d+)\//
 
-    attr_accessor :title, :uri, :author, :description, :display_name, :volumes
+    attr_accessor :title, :uri, :author, :description, :display_name, :volumes, :stats
     attr_reader :fic_id, :repository
 
     def initialize(fic_id:, repository:)
@@ -19,6 +20,7 @@ module PeasantPath
       @author = nil
       @display_name = nil
       @volumes = []
+      @stats = nil
     end
 
     # Chapter contents are only read from disk on first access. Display-only
@@ -33,6 +35,10 @@ module PeasantPath
       @chapters ? @chapters.size : @repository.list_chapters(@fic_id).size
     end
 
+    def word_count_estimate
+      @stats&.dig("word_count_estimate")
+    end
+
     def display_title
       @display_name || @title
     end
@@ -45,6 +51,7 @@ module PeasantPath
       fic.description = content["description"]
       fic.display_name = content["display_name"]
       fic.volumes = content["volumes"] || []
+      fic.stats = content["stats"]
 
       fic
     rescue Errno::ENOENT
@@ -69,6 +76,27 @@ module PeasantPath
       self
     end
 
+    def refresh_stats!
+      loaded_chapters = chapters
+      @stats = {
+        "word_count_estimate" => loaded_chapters.sum(&:word_count_estimate),
+        "chapter_count" => loaded_chapters.size,
+        "updated_at" => Time.now.utc.iso8601,
+      }
+
+      @volumes = @volumes.map do |volume|
+        volume_chapters = loaded_chapters.select { |chapter| chapter.volume_id.to_s == volume["id"].to_s }
+        volume.merge(
+          "word_count_estimate" => volume_chapters.sum(&:word_count_estimate),
+          "chapter_count" => volume_chapters.size,
+          "chapter_ids" => volume_chapters.map(&:chapter_id),
+        )
+      end
+
+      persist_fic_info
+      self
+    end
+
     # Build from the chapters currently on disk. Does not pull; callers that
     # want fresh chapters should #pull first.
     def book
@@ -84,7 +112,9 @@ module PeasantPath
     # data — only the metadata JSON is rewritten in that case.
     def persist_fic_info
       chapters = self.chapters.map(&:to_slug)
-      @repository.write_fic_info_hash(@fic_id, { schema_version: Config::SCHEMA_VERSION, author: @author, title: @title, display_name: @display_name, description: @description, volumes: @volumes, chapters: chapters })
+      info = { schema_version: Config::SCHEMA_VERSION, author: @author, title: @title, display_name: @display_name, description: @description, volumes: @volumes, chapters: chapters }
+      info[:stats] = @stats if @stats
+      @repository.write_fic_info_hash(@fic_id, info)
 
       @repository.write_cover_image(@fic_id, @cover_image) if @cover_image
       @volume_covers&.each do |volume_id, image_data|

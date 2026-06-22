@@ -45,6 +45,11 @@ RSpec.describe PeasantPath::Chapter do
         result = described_class.from_disk_content(new_format_content, mock_repo)
         expect(result.order_number).to eq 0
       end
+
+      it "loads persisted word_count_estimate" do
+        result = described_class.from_disk_content(new_format_content.merge("word_count_estimate" => 123), mock_repo)
+        expect(result.word_count_estimate).to eq 123
+      end
     end
 
     context "with old format (volume_id and order_number absent)" do
@@ -69,6 +74,30 @@ RSpec.describe PeasantPath::Chapter do
         expect(result.fic_id).to eq "107917"
         expect(result.chapter_id).to eq "2113501"
       end
+    end
+  end
+
+  describe "#word_count_estimate" do
+    it "uses the shared word counter" do
+      chapter = described_class.new(chapter_uri, mock_repo)
+      chapter.chapter_text = "<p>One <strong>two-three</strong> four's.</p><script>ignored()</script>"
+      allow(PeasantPath::WordCounter).to receive(:count_html).with(chapter.chapter_text).and_return(3)
+
+      expect(chapter.word_count_estimate).to eq 3
+    end
+  end
+
+  describe "#persist" do
+    it "includes word_count_estimate in chapter JSON" do
+      chapter = described_class.new(chapter_uri, mock_repo)
+      chapter.chapter_title = "Chapter 1"
+      chapter.chapter_text = "<p>One two three.</p>"
+      allow(mock_repo).to receive(:chapter_exists?).with("107917", "2113501").and_return(false)
+      allow(mock_repo).to receive(:write_chapter_hash)
+
+      chapter.persist
+
+      expect(mock_repo).to have_received(:write_chapter_hash).with("107917", "2113501", hash_including(word_count_estimate: 3))
     end
   end
 end

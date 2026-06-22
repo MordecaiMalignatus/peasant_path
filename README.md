@@ -86,7 +86,13 @@ only; run `serve` separately if you also want the web UI.
 ## Development
 
 ```sh
+bin/install_system_dependencies
 bundle install
 bundle exec rspec      # tests
 bundle exec rufo .     # formatting
 ```
+
+`ffi-icu` provides Unicode word-boundary analysis for EPUB word-count estimates.
+On Ubuntu this requires `libicu-dev`; on macOS the install script uses Homebrew's
+`icu4c@78` formula and prints the environment variables needed for the current
+shell.

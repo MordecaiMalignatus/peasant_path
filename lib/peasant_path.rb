@@ -1,6 +1,7 @@
 require "peasant_path/version"
 require "peasant_path/config"
 require "peasant_path/disk_repository"
+require "peasant_path/word_counter"
 require "peasant_path/chapter"
 require "peasant_path/royal_road_client"
 require "peasant_path/epub"

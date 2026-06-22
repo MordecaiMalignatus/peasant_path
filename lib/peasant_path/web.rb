@@ -55,6 +55,13 @@ module PeasantPath
         Rack::Utils.escape_html(text.to_s)
       end
 
+      def format_word_count(count)
+        return nil if count.nil?
+
+        rounded = count < 10_000 ? (count / 100.0).round * 100 : (count / 1_000.0).round * 1_000
+        "~#{rounded.to_s.reverse.gsub(/(\d{3})(?=\d)/, '\\1,').reverse} words"
+      end
+
       def flash!(message)
         session[:flash] = message
       end
@@ -72,11 +79,12 @@ module PeasantPath
           full = repo.epub_path(fic.fic_id, repo.epub_filename(fic.display_title))
           volumes = fic.volumes.filter_map do |vol|
             path = repo.epub_path(fic.fic_id, repo.epub_filename("#{fic.display_title} - #{vol["title"]}"))
-            { id: vol["id"], title: vol["title"] } if File.exist?(path)
+            { id: vol["id"], title: vol["title"], word_count: vol["word_count_estimate"] } if File.exist?(path)
           end
           {
             fic: fic,
             chapter_count: fic.chapter_count,
+            word_count: fic.word_count_estimate,
             full_available: File.exist?(full),
             volumes: volumes,
             pull_status: status_by_fic[fic.fic_id],

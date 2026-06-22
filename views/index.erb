@@ -23,10 +23,10 @@
     <div class="story">
       <h3><%= h(row[:fic].display_title) %></h3>
       <div class="muted">
-        <%= h(row[:fic].author) %> &middot; <%= h(row[:chapter_count]) %> chapters
+        <%= h(row[:fic].author) %> &middot; <%= h(row[:chapter_count]) %> chapters<% if row[:word_count] %> &middot; <%= h(format_word_count(row[:word_count])) %><% end %>
         <% if row[:pull_status] %>
           &middot;
-          last pull: <%= h(Time.parse(row[:pull_status][:timestamp]).strftime("%Y-%m-%d %H:%M")) %>,
+          last pull: <%= h(Time.parse(row[:pull_status][:timestamp]).strftime("%Y-%m-%d")) %>,
           <% if row[:pull_status][:error] %>
             error: <%= h(row[:pull_status][:error]) %>
           <% else %>
@@ -50,9 +50,9 @@
       </div>
       <div class="downloads">
         <% if row[:full_available] %>
-          <a href="/download/<%= h(row[:fic].fic_id) %>">Download (complete)</a>
+          <a href="/download/<%= h(row[:fic].fic_id) %>">Download (complete)</a><% if row[:word_count] %> <span class="muted"><%= h(format_word_count(row[:word_count])) %></span><% end %>
           <% row[:volumes].each_with_index do |vol, i| %>
-            <div class="volume"><span class="branch"><%= i == row[:volumes].size - 1 ? "└" : "├" %></span><a href="/download/<%= h(row[:fic].fic_id) %>/volume/<%= h(vol[:id]) %>"><%= h(vol[:title]) %></a></div>
+            <div class="volume"><span class="branch"><%= i == row[:volumes].size - 1 ? "└" : "├" %></span><a href="/download/<%= h(row[:fic].fic_id) %>/volume/<%= h(vol[:id]) %>"><%= h(vol[:title]) %></a><% if vol[:word_count] %> <span class="muted"><%= h(format_word_count(vol[:word_count])) %></span><% end %></div>
           <% end %>
         <% else %>
           <span class="pending">build pending</span>

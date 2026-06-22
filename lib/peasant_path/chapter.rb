@@ -6,6 +6,7 @@ module PeasantPath
     class InvalidURL < ArgumentError; end
 
     attr_reader :fic_id, :chapter_id, :uri, :repository
+    attr_writer :word_count_estimate
     attr_accessor :chapter_title, :chapter_text, :next_chapter, :previous_chapter, :volume_id, :order_number
 
     CHAPTER_REGEX = /https:\/\/www\.royalroad\.com\/fiction\/(\d+)\/[0-9a-z-]+\/chapter\/(\d+)/
@@ -34,6 +35,7 @@ module PeasantPath
       c.previous_chapter = content["previous_chapter"]
       c.volume_id = content["volume_id"]
       c.order_number = content["order_number"]
+      c.word_count_estimate = content["word_count_estimate"]
 
       c
     end
@@ -49,6 +51,12 @@ module PeasantPath
 
     def to_slug
       @chapter_id
+    end
+
+    def word_count_estimate
+      return @word_count_estimate unless @word_count_estimate.nil?
+
+      @word_count_estimate = WordCounter.count_html(@chapter_text)
     end
 
     # Chapters are write-once: once a chapter is on disk we never re-fetch it, so
@@ -67,6 +75,7 @@ module PeasantPath
         previous_chapter: @previous_chapter,
         volume_id: @volume_id,
         order_number: @order_number,
+        word_count_estimate: word_count_estimate,
       })
 
       self

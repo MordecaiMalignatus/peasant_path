@@ -1,4 +1,25 @@
 require_relative "lib/peasant_path/version"
+require "rbconfig"
+
+def configure_ffi_icu_paths
+  return unless RbConfig::CONFIG["host_os"].include?("darwin")
+
+  lib_dir = [
+    "/opt/homebrew/opt/icu4c@78/lib",
+    "/usr/local/opt/icu4c@78/lib",
+    "/opt/homebrew/opt/icu4c/lib",
+    "/usr/local/opt/icu4c/lib",
+  ].find { |path| File.directory?(path) }
+  return unless lib_dir
+
+  ENV["FFI_ICU_LIB"] = lib_dir if ENV["FFI_ICU_LIB"].to_s.empty?
+
+  fallback_paths = ENV["DYLD_FALLBACK_LIBRARY_PATH"].to_s.split(File::PATH_SEPARATOR)
+  fallback_paths.unshift(lib_dir) unless fallback_paths.include?(lib_dir)
+  ENV["DYLD_FALLBACK_LIBRARY_PATH"] = fallback_paths.reject(&:empty?).join(File::PATH_SEPARATOR)
+end
+
+configure_ffi_icu_paths
 
 task default: :test
 

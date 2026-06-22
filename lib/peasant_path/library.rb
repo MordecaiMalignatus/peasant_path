@@ -130,12 +130,14 @@ module PeasantPath
 
       new_chapters = chapters_to_pull.map { |chapter| @client.enrich_overview_chapter!(chapter).persist }
       chapters.concat(new_chapters)
+      fic.refresh_stats!
       new_chapters
     end
 
     # Rebuild the combined and per-volume EPUBs for a fic into the repo's build
     # directory. Assumes the fic's chapters are already on disk (no pull).
     def rebuild(fic)
+      fic.refresh_stats!
       fic.book.build_all(@repo.build_dir(fic.fic_id))
       @logger.info("rebuilt #{fic.display_title}")
     end
