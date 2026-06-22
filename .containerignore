@@ -1,0 +1,9 @@
+.git
+.agent-shell
+.ruby-lsp
+*.gem
+*.epub
+coverage
+tmp
+log
+vendor/bundle

@@ -44,6 +44,16 @@ peasant_path serve [--port 4567] [--bind 127.0.0.1]
 bundle exec rackup config.ru
 ```
 
+From a checkout, the web UI can also run in a Podman container while using the
+same local state directory as the non-container app:
+
+```sh
+bin/run_container --build
+```
+
+This mounts `~/.config/peasant_path` into the container, so followed stories,
+chapters, covers, pull logs, and built EPUBs are shared with local CLI runs.
+
 > **Exposure caveat.** The app has no authentication and no Host-header check,
 > and it mutates state (triggers scrapes, writes files). That's fine bound to
 > the default `127.0.0.1`. If you `--bind` to a non-loopback address you're

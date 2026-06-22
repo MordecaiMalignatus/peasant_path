@@ -1,0 +1,89 @@
+#!/usr/bin/env bash
+set -euo pipefail
+
+IMAGE="${PEASANT_PATH_IMAGE:-peasant-path:latest}"
+PORT="${PEASANT_PATH_PORT:-4567}"
+BIND="${PEASANT_PATH_BIND:-127.0.0.1}"
+STATE_DIR="${PEASANT_PATH_STATE_DIR:-$HOME/.config/peasant_path}"
+SECRET_FILE="$STATE_DIR/session_secret"
+
+usage() {
+  cat <<USAGE
+Usage: $0 [--build]
+
+Runs Peasant Path in a Podman container while persisting state in the same local
+directory used by the non-container app: ~/.config/peasant_path.
+
+Environment overrides:
+  PEASANT_PATH_IMAGE      Container image to run (default: peasant-path:latest)
+  PEASANT_PATH_PORT       Host/container web port (default: 4567)
+  PEASANT_PATH_BIND       Host bind address (default: 127.0.0.1)
+  PEASANT_PATH_STATE_DIR  Host state directory (default: ~/.config/peasant_path)
+
+Examples:
+  $0 --build
+  PEASANT_PATH_PORT=8080 $0
+USAGE
+}
+
+generate_secret() {
+  if command -v openssl >/dev/null 2>&1; then
+    openssl rand -hex 64
+  elif command -v ruby >/dev/null 2>&1; then
+    ruby -rsecurerandom -e 'print SecureRandom.hex(64)'
+  else
+    printf 'Install openssl or ruby so the script can generate PEASANT_PATH_SESSION_SECRET.\n' >&2
+    exit 1
+  fi
+}
+
+build_image=false
+while [[ $# -gt 0 ]]; do
+  case "$1" in
+    --build)
+      build_image=true
+      shift
+      ;;
+    --help|-h)
+      usage
+      exit 0
+      ;;
+    *)
+      printf 'Unknown argument: %s\n' "$1" >&2
+      usage >&2
+      exit 1
+      ;;
+  esac
+done
+
+if ! command -v podman >/dev/null 2>&1; then
+  printf 'podman is required to run the Peasant Path container.\n' >&2
+  exit 1
+fi
+
+if [[ "$build_image" == true ]]; then
+  podman build -t "$IMAGE" -f Containerfile .
+elif ! podman image exists "$IMAGE"; then
+  printf 'Container image %s does not exist. Run: %s --build\n' "$IMAGE" "$0" >&2
+  exit 1
+fi
+
+mkdir -p "$STATE_DIR"
+
+if [[ -z "${PEASANT_PATH_SESSION_SECRET:-}" ]]; then
+  if [[ ! -f "$SECRET_FILE" ]]; then
+    umask 077
+    generate_secret >"$SECRET_FILE"
+  fi
+  PEASANT_PATH_SESSION_SECRET="$(<"$SECRET_FILE")"
+fi
+
+exec podman run --rm \
+  --name peasant-path \
+  --publish "$BIND:$PORT:$PORT" \
+  --volume "$STATE_DIR:/data/.config/peasant_path:rw" \
+  --env PEASANT_PATH_SESSION_SECRET="$PEASANT_PATH_SESSION_SECRET" \
+  --env PEASANT_PATH_INTERVAL_HOURS="${PEASANT_PATH_INTERVAL_HOURS:-6}" \
+  --env PEASANT_PATH_SCHEDULER="${PEASANT_PATH_SCHEDULER:-internal}" \
+  "$IMAGE" \
+  peasant_path serve --bind 0.0.0.0 --port "$PORT"
