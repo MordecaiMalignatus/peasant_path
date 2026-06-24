@@ -68,14 +68,18 @@ chapters, covers, pull logs, and built EPUBs are shared with local CLI runs.
 
 ### Automatic pulling
 
-The server pulls and rebuilds changed stories on a schedule. There are two
-mechanisms; the web process picks one automatically.
+The server pulls and rebuilds changed stories on a schedule. A single `install`
+command detects the host OS and sets up the right scheduler, always falling back
+to in-process scheduling when no external one is available.
+
+```sh
+peasant_path install [--interval HOURS] [--port N] [--bind ADDR]
+```
 
 **systemd (Linux, preferred).** Installs `--user` units: a web service kept
 alive by `Restart=always`, plus a timer that runs `refresh` periodically.
 
 ```sh
-peasant_path install [--interval HOURS] [--port N] [--bind ADDR]
 systemctl --user daemon-reload
 systemctl --user enable --now peasant-path-web.service peasant-path-pull.timer
 loginctl enable-linger "$USER"   # keep user units running without an active login
@@ -84,14 +88,16 @@ loginctl enable-linger "$USER"   # keep user units running without an active log
 When the timer is active, the web process detects it and does **not** also
 schedule pulls in-process.
 
-**In-process fallback.** When systemd isn't driving the pull (e.g. macOS, or no
-units installed), `serve` runs an in-process loop instead, on the same interval.
-Override behaviour with `PEASANT_PATH_SCHEDULER` (`off` / `internal` /
-`external`) and the cadence with `PEASANT_PATH_INTERVAL_HOURS` (default 6).
+**launchd (macOS).** Installs a launchd job that runs `refresh` (pull + rebuild)
+on an interval, then prints the `launchctl load` command. This schedules the
+pull only; run `serve` separately if you also want the web UI. `--port`/`--bind`
+apply to the systemd web service and are ignored here.
 
-**macOS launchd.** `peasant_path schedule [--interval HOURS]` installs a launchd
-job that runs `refresh` (pull + rebuild) on an interval. This schedules the pull
-only; run `serve` separately if you also want the web UI.
+**In-process fallback.** When no external scheduler is installed (or the host
+supports neither systemd nor launchd), `serve` runs an in-process loop on the
+same interval. Override behaviour with `PEASANT_PATH_SCHEDULER` (`off` /
+`internal` / `external`) and the cadence with `PEASANT_PATH_INTERVAL_HOURS`
+(default 6).
 
 ## Development
 

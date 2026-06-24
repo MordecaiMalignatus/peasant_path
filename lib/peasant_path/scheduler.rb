@@ -25,6 +25,19 @@ module PeasantPath
       end
     end
 
+    # Which external scheduler this host can install. systemd is Linux's
+    # mechanism, launchd is macOS's; anything else has no external scheduler and
+    # relies on serve's in-process loop, so we report :internal.
+    def self.host_scheduler
+      return :systemd if systemd_available?
+      return :launchd if macos?
+      :internal
+    end
+
+    def self.macos?
+      RbConfig::CONFIG["host_os"].include?("darwin")
+    end
+
     def self.launchd_plist(ruby_path:, script_path:, interval_seconds:, log_dir:)
       <<~XML
         <?xml version="1.0" encoding="UTF-8"?>

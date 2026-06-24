@@ -31,6 +31,25 @@ RSpec.describe PeasantPath::Scheduler do
     end
   end
 
+  describe ".host_scheduler" do
+    it "is :systemd when booted under systemd" do
+      allow(described_class).to receive(:systemd_available?).and_return(true)
+      expect(described_class.host_scheduler).to eq :systemd
+    end
+
+    it "is :launchd on macOS without systemd" do
+      allow(described_class).to receive(:systemd_available?).and_return(false)
+      allow(described_class).to receive(:macos?).and_return(true)
+      expect(described_class.host_scheduler).to eq :launchd
+    end
+
+    it "falls back to :internal when no external scheduler is available" do
+      allow(described_class).to receive(:systemd_available?).and_return(false)
+      allow(described_class).to receive(:macos?).and_return(false)
+      expect(described_class.host_scheduler).to eq :internal
+    end
+  end
+
   describe ".systemd_timer_active?" do
     it "is false when not booted under systemd" do
       allow(described_class).to receive(:systemd_available?).and_return(false)

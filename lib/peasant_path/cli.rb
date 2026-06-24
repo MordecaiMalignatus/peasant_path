@@ -89,31 +89,6 @@ module PeasantPath
       puts "No new chapters: #{quiet.map { |_, d| d[:title] }.join(", ")}" unless quiet.empty?
     end
 
-    desc "schedule", "Install a launchd job to refresh (pull + rebuild) automatically (macOS only)"
-    option :interval, type: :numeric, aliases: "-i", default: 6, desc: "Pull interval in hours"
-
-    def schedule
-      interval_hours = options[:interval]
-      interval_seconds = (interval_hours * 3600).to_i
-      ruby_path = RbConfig.ruby
-      script_path = File.expand_path($PROGRAM_NAME)
-      plist_path = File.expand_path("~/Library/LaunchAgents/com.peasant_path.pull.plist")
-      log_dir = File.expand_path("~/Library/Logs")
-
-      plist = Scheduler.launchd_plist(
-        ruby_path: ruby_path,
-        script_path: script_path,
-        interval_seconds: interval_seconds,
-        log_dir: log_dir,
-      )
-
-      File.write(plist_path, plist)
-      interval_label = interval_hours == 1 ? "every hour" : "every #{interval_hours} hours"
-      puts "Wrote launchd plist (#{interval_label}) to #{plist_path}"
-      puts "Load with:"
-      puts "  launchctl load #{plist_path}"
-    end
-
     desc "serve", "Start the web interface"
     option :port, type: :numeric, default: 4567, desc: "Port to bind"
     option :bind, type: :string, default: "127.0.0.1", desc: "Address to bind"
@@ -142,12 +117,22 @@ module PeasantPath
       end
     end
 
-    desc "install", "Install systemd --user units for the web server and auto-pull timer (Linux)"
+    desc "install", "Install an auto-refresh scheduler for the detected OS (systemd/launchd), falling back to in-process scheduling"
     option :interval, type: :numeric, aliases: "-i", default: Scheduler::DEFAULT_INTERVAL_HOURS, desc: "Pull interval in hours"
-    option :port, type: :numeric, default: 4567, desc: "Port the web server binds"
-    option :bind, type: :string, default: "127.0.0.1", desc: "Address the web server binds"
+    option :port, type: :numeric, default: 4567, desc: "Port the web server binds (systemd only)"
+    option :bind, type: :string, default: "127.0.0.1", desc: "Address the web server binds (systemd only)"
 
     def install
+      case Scheduler.host_scheduler
+      when :systemd then install_systemd
+      when :launchd then install_launchd
+      else install_internal_notice
+      end
+    end
+
+    private
+
+    def install_systemd
       ruby_path = RbConfig.ruby
       script_path = File.expand_path($PROGRAM_NAME)
       unit_dir = File.expand_path("~/.config/systemd/user")
@@ -171,7 +156,35 @@ module PeasantPath
       puts "  loginctl enable-linger #{ENV["USER"]}   # keep user units running without an active login"
     end
 
-    private
+    def install_launchd
+      interval_hours = options[:interval]
+      ruby_path = RbConfig.ruby
+      script_path = File.expand_path($PROGRAM_NAME)
+      plist_path = File.expand_path("~/Library/LaunchAgents/com.peasant_path.pull.plist")
+      log_dir = File.expand_path("~/Library/Logs")
+
+      plist = Scheduler.launchd_plist(
+        ruby_path: ruby_path,
+        script_path: script_path,
+        interval_seconds: (interval_hours * 3600).to_i,
+        log_dir: log_dir,
+      )
+
+      FileUtils.mkdir_p(File.dirname(plist_path))
+      File.write(plist_path, plist)
+      interval_label = interval_hours == 1 ? "every hour" : "every #{interval_hours} hours"
+      puts "Wrote launchd plist (#{interval_label}) to #{plist_path}"
+      puts "Load with:"
+      puts "  launchctl load #{plist_path}"
+      puts ""
+      puts "This schedules the pull only. Run 'serve' separately if you also want the web UI."
+    end
+
+    def install_internal_notice
+      puts "No external OS scheduler available on this host."
+      puts "Run 'serve' and it will pull and rebuild in-process on an interval."
+      puts "Tune the cadence with PEASANT_PATH_INTERVAL_HOURS (default #{Scheduler::DEFAULT_INTERVAL_HOURS})."
+    end
 
     def render_pull_results(results)
       quiet = []
