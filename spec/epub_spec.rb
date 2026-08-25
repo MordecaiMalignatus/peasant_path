@@ -221,11 +221,12 @@ RSpec.describe PeasantPath::Epub do
 
   describe ".format_chapter_in_xhtml" do
     it "escapes the chapter title while preserving chapter HTML" do
-      chapter = instance_double(PeasantPath::Chapter, chapter_title: "Ch <1>", chapter_text: "<p>Content</p>")
+      chapter = instance_double(PeasantPath::Chapter, chapter_id: "123456", chapter_title: "Ch <1>", chapter_text: "<p>Content</p>")
 
       xhtml = described_class.format_chapter_in_xhtml(chapter).read
 
       expect(xhtml).to include("Ch &lt;1&gt;")
+      expect(xhtml).to include('<h2 id="rr-ch-123456">')
       expect(xhtml).to include("<p>Content</p>")
     end
   end
