@@ -94,7 +94,7 @@ module PeasantPath
         <html xmlns="http://www.w3.org/1999/xhtml">
         <head><title>#{escaped_title}</title></head>
         <body>
-        <h2>#{escaped_title}</h2>
+        <h2 id="rr-ch-#{h(chapter.chapter_id)}">#{escaped_title}</h2>
         #{fragment.to_xhtml}</body></html>
       TEXT
     end
