@@ -2,13 +2,31 @@
 set -euo pipefail
 
 usage() {
-  printf 'Usage: %s\n\nInstalls ICU system libraries required by ffi-icu on Ubuntu or macOS.\n' "$0"
+  printf 'Usage: %s\n\nInstalls ICU system libraries required by ffi-icu, and a Chrome browser\nrequired by FanFictionNetClient (ferrum drives it headlessly), on Ubuntu or\nmacOS.\n' "$0"
 }
 
 if [[ "${1:-}" == "--help" || "${1:-}" == "-h" ]]; then
   usage
   exit 0
 fi
+
+# The plain "chromium"/"chromium-browser" apt packages resolve to a transitional
+# snap wrapper on current Ubuntu, which doesn't run in containers/sandboxes
+# without snapd — installing Google Chrome's official .deb directly avoids
+# that, and needs neither an apt repo nor a signing key.
+install_chrome_linux() {
+  if command -v google-chrome >/dev/null 2>&1 || command -v google-chrome-stable >/dev/null 2>&1; then
+    printf 'Chrome already installed, skipping.\n'
+    return
+  fi
+
+  local arch deb_path
+  arch="$(dpkg --print-architecture)"
+  deb_path="$(mktemp -t google-chrome-XXXXXX.deb)"
+  curl -sL -o "$deb_path" "https://dl.google.com/linux/direct/google-chrome-stable_current_${arch}.deb"
+  sudo apt-get install -y "$deb_path"
+  rm -f "$deb_path"
+}
 
 case "$(uname -s)" in
   Darwin)
@@ -24,6 +42,12 @@ case "$(uname -s)" in
     printf 'For this shell, run:\n'
     printf '  export FFI_ICU_LIB="%s/lib"\n' "$icu_prefix"
     printf '  export DYLD_FALLBACK_LIBRARY_PATH="%s/lib:${DYLD_FALLBACK_LIBRARY_PATH:-}"\n' "$icu_prefix"
+
+    if ! command -v google-chrome >/dev/null 2>&1 && [[ ! -d "/Applications/Google Chrome.app" ]]; then
+      brew install --cask google-chrome
+    else
+      printf 'Chrome already installed, skipping.\n'
+    fi
     ;;
   Linux)
     if [[ -r /etc/os-release ]]; then
@@ -32,12 +56,13 @@ case "$(uname -s)" in
     fi
 
     if [[ "${ID:-}" != "ubuntu" && "${ID_LIKE:-}" != *ubuntu* && "${ID_LIKE:-}" != *debian* ]]; then
-      printf 'This script supports Ubuntu/Debian-like Linux systems. Install ICU development headers manually.\n' >&2
+      printf 'This script supports Ubuntu/Debian-like Linux systems. Install ICU development headers and a Chrome browser manually.\n' >&2
       exit 1
     fi
 
     sudo apt-get update
     sudo apt-get install -y libicu-dev
+    install_chrome_linux
     ;;
   *)
     printf 'Unsupported OS: %s\n' "$(uname -s)" >&2
