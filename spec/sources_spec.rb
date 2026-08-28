@@ -71,6 +71,16 @@ RSpec.describe PeasantPath::Sources do
     end
   end
 
+  describe ".default_clients" do
+    it "returns a client instance for every registered source" do
+      clients = described_class.default_clients
+
+      expect(clients.keys).to contain_exactly(*described_class::REGISTRY.keys)
+      expect(clients["royalroad"]).to be_a(PeasantPath::RoyalRoadClient)
+      expect(clients["fanfictionnet"]).to be_a(PeasantPath::FanFictionNetClient)
+    end
+  end
+
   describe ".uri_for" do
     it "builds the canonical story URI for an unprefixed fic_id" do
       expect(described_class.uri_for("107917")).to eq "https://www.royalroad.com/fiction/107917/"

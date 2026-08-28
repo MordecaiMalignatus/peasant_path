@@ -26,6 +26,13 @@ module PeasantPath
       REGISTRY.fetch(source_key) { raise ArgumentError, "Unknown source: #{source_key}" }[:client_class]
     end
 
+    # A fresh client instance per registered source, keyed by source key —
+    # Library's default `clients:`, so a newly registered source is wired up
+    # automatically instead of needing a matching manual edit there.
+    def self.default_clients
+      REGISTRY.transform_values { |entry| entry[:client_class].new }
+    end
+
     def self.source_key_for_host(host)
       REGISTRY.find { |_, entry| entry[:hosts].include?(host) }&.first
     end

@@ -33,6 +33,16 @@ RSpec.describe PeasantPath::Library do
 
   after { FileUtils.rm_rf(tmpdir) }
 
+  describe "#initialize" do
+    it "defaults to a working client for every registered source, not just royalroad" do
+      default_library = described_class.new(repo: repo)
+
+      PeasantPath::Sources::REGISTRY.each_key do |source_key|
+        expect { default_library.send(:client_for, source_key) }.not_to raise_error
+      end
+    end
+  end
+
   describe "#follow" do
     it "rejects non-RoyalRoad URLs" do
       expect { library.follow("https://example.com/fiction/1/") }.to raise_error(PeasantPath::Library::InvalidURL)

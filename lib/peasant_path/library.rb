@@ -18,7 +18,7 @@ module PeasantPath
     # the web/daemon injects a real logger to record pulls and rebuilds.
     # clients maps each source key (see Sources) to the client instance that
     # talks to it.
-    def initialize(repo: DiskRepository.new(DEFAULT_ROOT), logger: Logger.new(File::NULL), clients: { Sources::DEFAULT => RoyalRoadClient.new })
+    def initialize(repo: DiskRepository.new(DEFAULT_ROOT), logger: Logger.new(File::NULL), clients: Sources.default_clients)
       @repo = repo
       @logger = logger
       @clients = clients
