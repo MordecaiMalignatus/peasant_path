@@ -17,12 +17,12 @@ module PeasantPath
       @config = Config.from_config_file(@repo.read_config_file)
     end
 
-    desc "add URL [URL...]", "Follow one or more RoyalRoad stories by URL"
+    desc "add URL [URL...]", "Follow one or more stories by URL (RoyalRoad or FanFiction.net)"
     option :name, type: :string, aliases: "-n", desc: "Override display name for the story"
 
     def add(*urls)
       if urls.empty?
-        raise Thor::Error, "Please provide at least one RoyalRoad URL"
+        raise Thor::Error, "Please provide at least one story URL"
       end
 
       urls.each do |url|
