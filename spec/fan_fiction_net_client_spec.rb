@@ -4,8 +4,10 @@ RSpec.describe PeasantPath::FanFictionNetClient do
   let(:client) { PeasantPath::FanFictionNetClient.new }
   let(:chapter_1_html) { File.read(File.expand_path("../data/ffn-chapter-1.html", __dir__)) }
   let(:chapter_2_html) { File.read(File.expand_path("../data/ffn-chapter-2.html", __dir__)) }
+  let(:single_chapter_html) { File.read(File.expand_path("../data/ffn-single-chapter.html", __dir__)) }
   let(:chapter_1_doc) { Nokogiri::HTML(chapter_1_html) }
   let(:chapter_2_doc) { Nokogiri::HTML(chapter_2_html) }
+  let(:single_chapter_doc) { Nokogiri::HTML(single_chapter_html) }
   let(:mock_repo) { double("DiskRepository") }
 
   describe ".story_uri" do
@@ -59,6 +61,14 @@ RSpec.describe PeasantPath::FanFictionNetClient do
       expect(result[:volumes]).to eq []
       expect(result[:volume_covers]).to eq({})
     end
+
+    it "still extracts metadata from a single-chapter story's page" do
+      allow(client).to receive(:fetch).and_return(single_chapter_doc)
+      result = client.fic_info("https://www.fanfiction.net/s/12417635/1/")
+
+      expect(result[:title]).to eq "Test Story Beta"
+      expect(result[:author]).to eq "Test Author"
+    end
   end
 
   describe "#chapter_overview" do
@@ -84,6 +94,20 @@ RSpec.describe PeasantPath::FanFictionNetClient do
                            "https://www.fanfiction.net/s/8872491/1/",
                            "https://www.fanfiction.net/s/8872491/2/",
                          ]
+    end
+
+    context "when the story has only one chapter (no #chap_select dropdown)" do
+      before { allow(client).to receive(:fetch).and_return(single_chapter_doc) }
+
+      it "returns a single chapter 1 entry instead of raising" do
+        result = client.chapter_overview("fanfictionnet:12417635")
+
+        expect(result).to eq [{
+                               "title" => "Chapter 1",
+                               "order" => 0,
+                               "url" => "https://www.fanfiction.net/s/12417635/1/",
+                             }]
+      end
     end
   end
 

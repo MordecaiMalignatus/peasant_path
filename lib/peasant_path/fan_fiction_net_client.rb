@@ -71,11 +71,17 @@ module PeasantPath
     # navigation dropdown (there's no separate TOC page or JS state to read,
     # unlike RoyalRoad). Returns the same hash shape RoyalRoadClient does:
     # absolute url, title, order — consumed by Chapter.from_overview_hash.
+    #
+    # A single-chapter story has no dropdown at all — there's nothing to
+    # navigate to/from — so its absence isn't an error, just a one-chapter
+    # story.
     def chapter_overview(fic_id)
       native_id = Sources.native_id_for_fic_id(fic_id)
       uri = self.class.story_uri(native_id)
       doc = fetch(uri)
-      select = require_element(doc, "#chap_select", context: uri)
+      select = doc.at_css("#chap_select")
+
+      return single_chapter_overview(native_id) if select.nil?
 
       select.css("option").map do |opt|
         chapter_num = opt["value"]
@@ -124,6 +130,14 @@ module PeasantPath
       ensure
         browser&.quit
       end
+    end
+
+    def single_chapter_overview(native_id)
+      [{
+        "title" => "Chapter 1",
+        "order" => 0,
+        "url" => self.class.story_uri(native_id),
+      }]
     end
 
     def require_element(doc, selector, context:)
