@@ -6,15 +6,13 @@ module PeasantPath
   class Fic
     class MissingState < StandardError; end
 
-    FIC_ID_REGEX = /https:\/\/www\.royalroad\.com\/fiction\/(\d+)\//
-
     attr_accessor :title, :uri, :author, :description, :display_name, :volumes, :stats
     attr_reader :fic_id, :repository
 
     def initialize(fic_id:, repository:)
       @repository = repository
       @fic_id = fic_id
-      @uri = "https://www.royalroad.com/fiction/#{fic_id}/"
+      @uri = Sources.uri_for(fic_id)
       @chapters = nil
       @title = nil
       @author = nil
@@ -41,6 +39,11 @@ module PeasantPath
 
     def display_title
       @display_name || @title
+    end
+
+    # The source this fic was pulled from, derived from fic_id (see Sources).
+    def source
+      Sources.key_for_fic_id(@fic_id)
     end
 
     def self.from_disk(fic_id, repository)
@@ -103,8 +106,9 @@ module PeasantPath
       Epub.new(self)
     end
 
-    # The RR fic ID found in the URL is considered the canon identifier of a fic,
-    # after that, title and author and description are all mutable.
+    # The fic ID (source-scoped, see Sources) is considered the canon
+    # identifier of a fic; after that, title and author and description are
+    # all mutable.
     #
     # Cover bytes are only written when we actually have them (i.e. after a
     # fresh #fetch_fic_info). A fic loaded via #from_disk carries nil covers, so
@@ -120,13 +124,6 @@ module PeasantPath
       @volume_covers&.each do |volume_id, image_data|
         @repository.write_volume_cover_image(@fic_id, volume_id, image_data)
       end
-    end
-
-    # Returns the fic ID embedded in a RoyalRoad story URL, or nil if the URL
-    # doesn't contain a /fiction/<id>/ path. Callers that require a story URL
-    # should treat nil as "not a story URL".
-    def self.uri_to_fic_id(uri)
-      FIC_ID_REGEX.match(uri)&.[](1)
     end
   end
 end

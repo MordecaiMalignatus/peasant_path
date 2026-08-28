@@ -16,10 +16,12 @@ module PeasantPath
 
     # logger defaults to a silent one so the CLI's own output isn't duplicated;
     # the web/daemon injects a real logger to record pulls and rebuilds.
-    def initialize(repo: DiskRepository.new(DEFAULT_ROOT), logger: Logger.new(File::NULL), client: RoyalRoadClient.new)
+    # clients maps each source key (see Sources) to the client instance that
+    # talks to it.
+    def initialize(repo: DiskRepository.new(DEFAULT_ROOT), logger: Logger.new(File::NULL), clients: { Sources::DEFAULT => RoyalRoadClient.new })
       @repo = repo
       @logger = logger
-      @client = client
+      @clients = clients
     end
 
     def config
@@ -120,15 +122,16 @@ module PeasantPath
     end
 
     def pull_fic(fic, throttle: false)
-      @client.throttle = throttle
+      client = client_for(fic.source)
+      client.throttle = throttle
       chapters = fic.chapters
-      chapter_toc = @client.chapter_overview(fic.fic_id).map { |chapter_hash| Chapter.from_overview_hash(chapter_hash, @repo) }
+      chapter_toc = client.chapter_overview(fic.fic_id).map { |chapter_hash| Chapter.from_overview_hash(chapter_hash, @repo) }
       chapters_to_pull = chapter_toc.filter { |rr_chapter| !chapters.include?(rr_chapter) }
 
-      fic.apply_fic_info(@client.fic_info(fic.uri.to_s))
+      fic.apply_fic_info(client.fic_info(fic.uri.to_s))
       fic.persist_fic_info
 
-      new_chapters = chapters_to_pull.map { |chapter| @client.enrich_overview_chapter!(chapter).persist }
+      new_chapters = chapters_to_pull.map { |chapter| client.enrich_overview_chapter!(chapter).persist }
       chapters.concat(new_chapters)
       fic.refresh_stats!
       new_chapters
@@ -212,10 +215,11 @@ module PeasantPath
       fic_data
     end
 
-    # Validate that +url+ is a RoyalRoad story URL and return its fic ID.
-    # Every "this isn't a story URL" case — a malformed string, a non-RoyalRoad
-    # host, or a RoyalRoad URL without a /fiction/<id>/ path — raises InvalidURL
-    # so front-ends have a single error type to rescue.
+    # Validate that +url+ is a story URL on a known source and return its
+    # (source-scoped, see Sources) fic ID. Every "this isn't a story URL" case
+    # — a malformed string, an unrecognized host, or a URL on a known host
+    # without a story path — raises InvalidURL so front-ends have a single
+    # error type to rescue.
     def validate_story_url(url)
       begin
         uri = URI(url)
@@ -223,14 +227,17 @@ module PeasantPath
         raise InvalidURL, "'#{url}' is not a valid URL"
       end
 
-      unless uri.host == "www.royalroad.com"
-        raise InvalidURL, "'#{url}' is not a RoyalRoad URL"
-      end
+      source_key = Sources.source_key_for_host(uri.host)
+      raise InvalidURL, "'#{url}' is not a URL on a supported story source" if source_key.nil?
 
-      fic_id = Fic.uri_to_fic_id(uri.to_s)
-      raise InvalidURL, "'#{url}' is not a RoyalRoad story URL" if fic_id.nil?
+      native_id = Sources.client_class_for(source_key).native_fic_id_from_url(uri)
+      raise InvalidURL, "'#{url}' is not a valid story URL" if native_id.nil?
 
-      fic_id
+      Sources.scoped_fic_id(source_key, native_id)
+    end
+
+    def client_for(source_key)
+      @clients.fetch(source_key) { raise ArgumentError, "No client configured for source: #{source_key}" }
     end
   end
 end

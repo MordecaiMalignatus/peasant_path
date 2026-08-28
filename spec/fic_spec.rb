@@ -99,6 +99,14 @@ RSpec.describe PeasantPath::Fic do
     end
   end
 
+  describe "#source" do
+    it "treats an unprefixed fic_id as royalroad" do
+      fic = described_class.new(fic_id: fic_id, repository: mock_repo)
+
+      expect(fic.source).to eq "royalroad"
+    end
+  end
+
   describe "#display_title" do
     it "prefers display_name over title" do
       fic = described_class.new(fic_id: fic_id, repository: mock_repo)

@@ -22,7 +22,7 @@ module PeasantPath
         author: @fic.author,
         cover_path: @fic.repository.cover_image_path(@fic.fic_id),
         chapters: @fic.chapters,
-        identifier: "https://www.royalroad.com/fiction/#{@fic.fic_id}/",
+        identifier: @fic.uri,
       ))
     end
 
@@ -42,7 +42,7 @@ module PeasantPath
           author: @fic.author,
           cover_path: volume_cover_path(vol["id"]),
           chapters: chapters_for_volume(vol),
-          identifier: "https://www.royalroad.com/fiction/#{@fic.fic_id}/#volume-#{vol["id"]}",
+          identifier: "#{@fic.uri}#volume-#{vol["id"]}",
         ))
       end
     end

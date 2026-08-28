@@ -26,6 +26,22 @@ RSpec.describe PeasantPath::RoyalRoadClient do
     end
   end
 
+  describe ".story_uri" do
+    it "builds the canonical story URL for a native fic ID" do
+      expect(PeasantPath::RoyalRoadClient.story_uri("107917")).to eq "https://www.royalroad.com/fiction/107917/"
+    end
+  end
+
+  describe ".native_fic_id_from_url" do
+    it "extracts the fic ID from a story URL" do
+      expect(PeasantPath::RoyalRoadClient.native_fic_id_from_url("https://www.royalroad.com/fiction/107917/sky-pride")).to eq "107917"
+    end
+
+    it "returns nil for a URL with no /fiction/<id>/ path" do
+      expect(PeasantPath::RoyalRoadClient.native_fic_id_from_url("https://www.royalroad.com/")).to be_nil
+    end
+  end
+
   describe "#fic_info" do
     before do
       allow(PeasantPath::RoyalRoadClient).to receive(:get).and_return(

@@ -4,7 +4,11 @@ require "nokogiri"
 module PeasantPath
   class RoyalRoadClient
     include HTTParty
-    base_uri "www.royalroad.com"
+
+    HOST = "www.royalroad.com"
+    FIC_ID_REGEX = /https:\/\/www\.royalroad\.com\/fiction\/(\d+)\//
+
+    base_uri HOST
 
     # Raised when the page doesn't contain the JS state we scrape — RoyalRoad
     # changed its markup, served an error page, or rate-limited us. Carries the
@@ -89,6 +93,18 @@ module PeasantPath
     def self.extract_button_link(elem)
       return nil if elem.attribute("disabled")
       elem.attribute("href").value
+    end
+
+    # The canonical story URL for a RoyalRoad native fic ID. Used both to build
+    # a Fic's #uri and as the EPUB's identifier.
+    def self.story_uri(native_id)
+      "https://#{HOST}/fiction/#{native_id}/"
+    end
+
+    # Returns the RoyalRoad native fic ID embedded in a story URL, or nil if
+    # the URL doesn't contain a /fiction/<id>/ path.
+    def self.native_fic_id_from_url(uri)
+      FIC_ID_REGEX.match(uri.to_s)&.[](1)
     end
 
     # Covers live on royalroadcdn.com, a different host than base_uri

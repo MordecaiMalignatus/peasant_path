@@ -14,7 +14,7 @@ RSpec.describe PeasantPath::Web do
   let(:tmpdir) { Dir.mktmpdir }
   let(:repo) { PeasantPath::DiskRepository.new(tmpdir) }
   let(:mock_rr) { instance_double(PeasantPath::RoyalRoadClient) }
-  let(:library) { PeasantPath::Library.new(repo: repo, client: mock_rr) }
+  let(:library) { PeasantPath::Library.new(repo: repo, clients: { "royalroad" => mock_rr }) }
   let(:fic_id) { "107917" }
 
   # Records that a background job was requested without spawning a thread or
@@ -170,10 +170,10 @@ RSpec.describe PeasantPath::Web do
       expect(jobs.runs).to eq 1
     end
 
-    it "rejects a non-RoyalRoad URL with a flash and no job" do
+    it "rejects a URL on an unsupported source with a flash and no job" do
       post "/follow", url: "https://example.com/fiction/1/"
       follow_redirect!
-      expect(last_response.body).to include("is not a RoyalRoad URL")
+      expect(last_response.body).to include("is not a URL on a supported story source")
       expect(library.config.followed_stories).to be_empty
       expect(jobs.runs).to eq 0
     end

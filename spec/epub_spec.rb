@@ -9,6 +9,7 @@ RSpec.describe PeasantPath::Epub do
     instance_double(
       PeasantPath::Fic,
       fic_id: "107917",
+      uri: "https://www.royalroad.com/fiction/107917/",
       display_title: "Sky Pride",
       author: "Warby Picus",
       repository: mock_repo,

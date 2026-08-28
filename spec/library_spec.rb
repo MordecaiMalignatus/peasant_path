@@ -5,7 +5,7 @@ RSpec.describe PeasantPath::Library do
   let(:tmpdir) { Dir.mktmpdir }
   let(:repo) { PeasantPath::DiskRepository.new(tmpdir) }
   let(:mock_rr) { instance_double(PeasantPath::RoyalRoadClient) }
-  let(:library) { described_class.new(repo: repo, client: mock_rr) }
+  let(:library) { described_class.new(repo: repo, clients: { "royalroad" => mock_rr }) }
   let(:fic_id) { "107917" }
   let(:url) { "https://www.royalroad.com/fiction/107917/sky-pride" }
 
