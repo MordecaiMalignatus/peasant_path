@@ -9,8 +9,6 @@ module PeasantPath
     attr_writer :word_count_estimate
     attr_accessor :chapter_title, :chapter_text, :next_chapter, :previous_chapter, :volume_id, :order_number
 
-    CHAPTER_REGEX = /https:\/\/www\.royalroad\.com\/fiction\/(\d+)\/[0-9a-z-]+\/chapter\/(\d+)/
-
     def ==(other)
       self.class == other.class &&
         @fic_id == other.fic_id &&
@@ -19,11 +17,11 @@ module PeasantPath
 
     def initialize(uri, repository)
       @uri = uri
-      match = CHAPTER_REGEX.match(uri)
-      raise InvalidURL, "Invalid RoyalRoad chapter URL: #{uri}" unless match
+      source_key, native_fic_id, native_chapter_id = Sources.chapter_ids_from_url(uri)
+      raise InvalidURL, "Unrecognized chapter URL: #{uri}" unless source_key
 
-      @fic_id = match[1]
-      @chapter_id = match[2]
+      @fic_id = Sources.scoped_fic_id(source_key, native_fic_id)
+      @chapter_id = native_chapter_id
       @repository = repository
     end
 
@@ -40,8 +38,10 @@ module PeasantPath
       c
     end
 
+    # hash["url"] is expected to already be an absolute URL — each client's
+    # #chapter_overview is responsible for resolving its own relative paths.
     def self.from_overview_hash(hash, repo)
-      c = new("https://www.royalroad.com#{hash["url"]}", repo)
+      c = new(hash["url"], repo)
       c.chapter_title = hash["title"]
       c.order_number = hash["order"]
       c.volume_id = hash["volumeId"]

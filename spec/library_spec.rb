@@ -22,8 +22,8 @@ RSpec.describe PeasantPath::Library do
 
   let(:overview) do
     [
-      { "id" => 2113501, "volumeId" => 10395, "order" => 0, "title" => "Chapter 1", "url" => "/fiction/107917/sky-pride/chapter/2113501/chapter-1" },
-      { "id" => 2113560, "volumeId" => 10395, "order" => 1, "title" => "Chapter 2", "url" => "/fiction/107917/sky-pride/chapter/2113560/chapter-2" },
+      { "id" => 2113501, "volumeId" => 10395, "order" => 0, "title" => "Chapter 1", "url" => "https://www.royalroad.com/fiction/107917/sky-pride/chapter/2113501/chapter-1" },
+      { "id" => 2113560, "volumeId" => 10395, "order" => 1, "title" => "Chapter 2", "url" => "https://www.royalroad.com/fiction/107917/sky-pride/chapter/2113560/chapter-2" },
     ]
   end
 
@@ -70,6 +70,31 @@ RSpec.describe PeasantPath::Library do
 
       expect(result[:followed]).to be false
       expect(library.config.followed_stories.count(fic_id)).to eq 1
+    end
+  end
+
+  describe "multi-source routing" do
+    let(:mock_ffn) { instance_double(PeasantPath::FanFictionNetClient) }
+    let(:library) { described_class.new(repo: repo, clients: { "royalroad" => mock_rr, "fanfictionnet" => mock_ffn }) }
+    let(:ffn_url) { "https://www.fanfiction.net/s/8872491/1/Test-Story-Alpha" }
+
+    it "scopes the fic_id to the matched source when following a second source's URL" do
+      expect(mock_rr).not_to receive(:fic_info)
+      result = library.follow(ffn_url)
+
+      expect(result[:fic_id]).to eq "fanfictionnet:8872491"
+    end
+
+    it "pulls a followed fic through the client registered for its source" do
+      allow(mock_ffn).to receive(:throttle=)
+      allow(mock_ffn).to receive(:chapter_overview).and_return([])
+      allow(mock_ffn).to receive(:fic_info).and_return(fic_info)
+      expect(mock_rr).not_to receive(:chapter_overview)
+
+      library.follow(ffn_url)
+      library.pull_all
+
+      expect(mock_ffn).to have_received(:chapter_overview).with("fanfictionnet:8872491")
     end
   end
 

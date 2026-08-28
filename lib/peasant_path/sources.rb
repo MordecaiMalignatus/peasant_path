@@ -11,6 +11,7 @@ module PeasantPath
 
     REGISTRY = {
       DEFAULT => { client_class: RoyalRoadClient, hosts: [RoyalRoadClient::HOST] },
+      "fanfictionnet" => { client_class: FanFictionNetClient, hosts: [FanFictionNetClient::HOST] },
     }.freeze
 
     def self.key_for_fic_id(fic_id)
@@ -27,6 +28,17 @@ module PeasantPath
 
     def self.source_key_for_host(host)
       REGISTRY.find { |_, entry| entry[:hosts].include?(host) }&.first
+    end
+
+    # Returns [source_key, native_fic_id, native_chapter_id] for the first
+    # registered client that recognizes +uri+ as one of its chapter URLs, or
+    # nil if none do.
+    def self.chapter_ids_from_url(uri)
+      REGISTRY.each do |source_key, entry|
+        native_ids = entry[:client_class].chapter_ids_from_url(uri)
+        return [source_key, *native_ids] if native_ids
+      end
+      nil
     end
 
     def self.scoped_fic_id(source_key, native_id)

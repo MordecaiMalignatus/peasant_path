@@ -139,7 +139,7 @@ RSpec.describe PeasantPath::RoyalRoadClient do
       result = client.chapter_overview(107917)
       first = result.find { |c| c["order"] == 0 }
       expect(first["title"]).to eq "Chapter 1- In the Care of a Hateful God"
-      expect(first["url"]).to eq "/fiction/107917/sky-pride/chapter/2113501/chapter-1--in-the-care-of-a-hateful-god"
+      expect(first["url"]).to eq "https://www.royalroad.com/fiction/107917/sky-pride/chapter/2113501/chapter-1--in-the-care-of-a-hateful-god"
     end
 
     it "extracts the first chapter's volume ID" do

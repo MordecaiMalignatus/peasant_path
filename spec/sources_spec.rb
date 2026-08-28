@@ -36,8 +36,28 @@ RSpec.describe PeasantPath::Sources do
       expect(described_class.source_key_for_host("www.royalroad.com")).to eq "royalroad"
     end
 
+    it "finds the second registered source too" do
+      expect(described_class.source_key_for_host("www.fanfiction.net")).to eq "fanfictionnet"
+    end
+
     it "returns nil for an unrecognized host" do
       expect(described_class.source_key_for_host("example.com")).to be_nil
+    end
+  end
+
+  describe ".chapter_ids_from_url" do
+    it "matches against the first registered client that recognizes the URL" do
+      result = described_class.chapter_ids_from_url("https://www.royalroad.com/fiction/107917/sky-pride/chapter/2113501/chapter-1")
+      expect(result).to eq ["royalroad", "107917", "2113501"]
+    end
+
+    it "matches a second source's chapter URL shape too" do
+      result = described_class.chapter_ids_from_url("https://www.fanfiction.net/s/8872491/2/Test-Story-Alpha")
+      expect(result).to eq ["fanfictionnet", "8872491", "2"]
+    end
+
+    it "returns nil for a URL no registered client recognizes" do
+      expect(described_class.chapter_ids_from_url("https://example.com/not-a-chapter")).to be_nil
     end
   end
 
@@ -54,6 +74,10 @@ RSpec.describe PeasantPath::Sources do
   describe ".uri_for" do
     it "builds the canonical story URI for an unprefixed fic_id" do
       expect(described_class.uri_for("107917")).to eq "https://www.royalroad.com/fiction/107917/"
+    end
+
+    it "builds the canonical story URI for a scoped fic_id" do
+      expect(described_class.uri_for("fanfictionnet:8872491")).to eq "https://www.fanfiction.net/s/8872491/1/"
     end
   end
 end

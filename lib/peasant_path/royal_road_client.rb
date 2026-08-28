@@ -7,6 +7,7 @@ module PeasantPath
 
     HOST = "www.royalroad.com"
     FIC_ID_REGEX = /https:\/\/www\.royalroad\.com\/fiction\/(\d+)\//
+    CHAPTER_REGEX = /https:\/\/www\.royalroad\.com\/fiction\/(\d+)\/[0-9a-z-]+\/chapter\/(\d+)/
 
     base_uri HOST
 
@@ -70,7 +71,9 @@ module PeasantPath
       # it via string manipulation :v
       extracted_json = extract_js_assignment(toc.body, "window.chapters", context: "fiction #{id}")
 
-      JSON.parse(extracted_json)
+      # Chapter.from_overview_hash expects an absolute url; RoyalRoad's own
+      # JSON gives a path relative to its own host.
+      JSON.parse(extracted_json).map { |hash| hash.merge("url" => "https://#{HOST}#{hash["url"]}") }
     end
 
     def enrich_overview_chapter!(overview_chapter)
@@ -105,6 +108,13 @@ module PeasantPath
     # the URL doesn't contain a /fiction/<id>/ path.
     def self.native_fic_id_from_url(uri)
       FIC_ID_REGEX.match(uri.to_s)&.[](1)
+    end
+
+    # Returns [native_fic_id, native_chapter_id] embedded in a chapter URL, or
+    # nil if the URL doesn't match RoyalRoad's chapter URL shape.
+    def self.chapter_ids_from_url(uri)
+      match = CHAPTER_REGEX.match(uri.to_s)
+      match ? [match[1], match[2]] : nil
     end
 
     # Covers live on royalroadcdn.com, a different host than base_uri

@@ -8,7 +8,7 @@ RSpec.describe PeasantPath::Chapter do
     it "raises a clear error for invalid chapter URLs" do
       expect {
         described_class.new("https://example.com/not-a-chapter", mock_repo)
-      }.to raise_error(described_class::InvalidURL, /Invalid RoyalRoad chapter URL/)
+      }.to raise_error(described_class::InvalidURL, /Unrecognized chapter URL/)
     end
   end
 
