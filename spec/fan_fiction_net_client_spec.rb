@@ -118,6 +118,7 @@ RSpec.describe PeasantPath::FanFictionNetClient do
       mock_browser = instance_double(Ferrum::Browser, goto: true, body: "<html><head><title>Just a moment...</title></head></html>", quit: true)
       allow(mock_browser).to receive(:headers).and_return(double(set: true))
       allow(Ferrum::Browser).to receive(:new).and_return(mock_browser)
+      allow(client).to receive(:sleep)
 
       expect { client.fic_info("https://www.fanfiction.net/s/8872491/1/") }.to raise_error(described_class::ScrapeError, /Cloudflare/)
     end

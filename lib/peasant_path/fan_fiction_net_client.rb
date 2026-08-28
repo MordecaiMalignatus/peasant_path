@@ -24,10 +24,18 @@ module PeasantPath
     CHAPTER_URL_REGEX = /https:\/\/www\.fanfiction\.net\/s\/(\d+)\/(\d+)/
     USER_AGENT = "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36"
 
+    # Unlike RoyalRoadClient, throttling here isn't optional: firing chapter
+    # fetches back-to-back (the default when the CLI's --throttle flag isn't
+    # passed) reads as bot-speed traffic to Cloudflare and triggers a
+    # challenge partway through a large fic, even though each fetch is
+    # already sequential. #throttle= is still accepted, matching the shared
+    # client interface Library calls it through, but its value is ignored —
+    # every fetch always pauses first.
     attr_writer :throttle
 
     def initialize
       @throttle = false
+      @mutex = Mutex.new
     end
 
     # The canonical story URL for a FanFiction.net native fic ID: chapter 1,
@@ -82,7 +90,6 @@ module PeasantPath
     def enrich_overview_chapter!(overview_chapter)
       raise ArgumentError, "Chapter URI is required" if overview_chapter.uri.nil?
 
-      sleep(rand(5..15)) if @throttle
       doc = fetch(overview_chapter.uri)
       storytext = require_element(doc, "#storytext", context: overview_chapter.uri)
 
@@ -96,19 +103,27 @@ module PeasantPath
     # DOM. A browser is spun up per fetch rather than reused across calls, so
     # a crashed or hung Chrome process can never outlive a single scrape —
     # important for the unattended scheduled pulls this feeds into.
+    #
+    # The mutex guarantees only one page is ever loading through this client
+    # at a time — nothing in this codebase currently fetches concurrently,
+    # but this makes it a hard invariant rather than an incidental side
+    # effect of today's call sites staying sequential.
     def fetch(url)
-      browser = Ferrum::Browser.new(headless: true, browser_options: { "no-sandbox" => nil })
-      browser.headers.set("User-Agent" => USER_AGENT)
-      browser.goto(url)
-      doc = Nokogiri::HTML(browser.body)
+      @mutex.synchronize do
+        sleep(rand(5..15))
+        browser = Ferrum::Browser.new(headless: true, browser_options: { "no-sandbox" => nil })
+        browser.headers.set("User-Agent" => USER_AGENT)
+        browser.goto(url)
+        doc = Nokogiri::HTML(browser.body)
 
-      if doc.at_css("title")&.text.to_s.include?("Just a moment")
-        raise ScrapeError, "#{url}: hit a Cloudflare challenge page instead of real content"
+        if doc.at_css("title")&.text.to_s.include?("Just a moment")
+          raise ScrapeError, "#{url}: hit a Cloudflare challenge page instead of real content"
+        end
+
+        doc
+      ensure
+        browser&.quit
       end
-
-      doc
-    ensure
-      browser&.quit
     end
 
     def require_element(doc, selector, context:)
