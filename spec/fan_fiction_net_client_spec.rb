@@ -125,6 +125,42 @@ RSpec.describe PeasantPath::FanFictionNetClient do
     end
   end
 
+  describe "fetch memoization" do
+    it "reuses the immediately preceding fetch for the same url, instead of loading it again" do
+      allow(client).to receive(:fetch_page).and_return(chapter_1_doc)
+
+      client.chapter_overview("fanfictionnet:8872491")
+      client.fic_info("https://www.fanfiction.net/s/8872491/1/")
+
+      expect(client).to have_received(:fetch_page).once
+    end
+
+    it "fetches again for a different url" do
+      allow(client).to receive(:fetch_page).and_return(chapter_1_doc, chapter_2_doc)
+      chapter = PeasantPath::Chapter.from_overview_hash(
+        { "title" => "Chapter 2", "order" => 1, "url" => "https://www.fanfiction.net/s/8872491/2/" }, mock_repo
+      )
+
+      client.fic_info("https://www.fanfiction.net/s/8872491/1/")
+      client.enrich_overview_chapter!(chapter)
+
+      expect(client).to have_received(:fetch_page).twice
+    end
+
+    it "fetches again for the same url once a different one has come in between" do
+      allow(client).to receive(:fetch_page).and_return(chapter_1_doc, chapter_2_doc, chapter_1_doc)
+      chapter = PeasantPath::Chapter.from_overview_hash(
+        { "title" => "Chapter 2", "order" => 1, "url" => "https://www.fanfiction.net/s/8872491/2/" }, mock_repo
+      )
+
+      client.fic_info("https://www.fanfiction.net/s/8872491/1/")
+      client.enrich_overview_chapter!(chapter)
+      client.fic_info("https://www.fanfiction.net/s/8872491/1/")
+
+      expect(client).to have_received(:fetch_page).exactly(3).times
+    end
+  end
+
   describe "error handling" do
     let(:chapter) do
       PeasantPath::Chapter.from_overview_hash(

@@ -36,6 +36,7 @@ module PeasantPath
     def initialize
       @throttle = false
       @mutex = Mutex.new
+      @last_fetch = nil
     end
 
     # The canonical story URL for a FanFiction.net native fic ID: chapter 1,
@@ -105,31 +106,50 @@ module PeasantPath
 
     private
 
+    # Loads +url+, or returns the previous fetch's result if it was for this
+    # same url. #chapter_overview and #fic_info both resolve to the same
+    # chapter-1 page for a given fic, and Library calls them back-to-back
+    # while pulling that fic, so this turns what would otherwise be two full
+    # throttled page loads into one. Only the single most recent fetch is
+    # kept (not a full cache), so it can never go stale across separate
+    # pulls — by the time a fic's chapter-1 page would come up again, many
+    # other fics' and chapters' urls have already cycled through and evicted
+    # it, which is exactly what should happen since a later pull needs a
+    # fresh look for newly published chapters, not last time's answer.
+    def fetch(url)
+      @mutex.synchronize do
+        cached_url, cached_doc = @last_fetch
+        next cached_doc if cached_url == url
+
+        doc = fetch_page(url)
+        @last_fetch = [url, doc]
+        doc
+      end
+    end
+
     # Loads +url+ in a fresh headless Chrome instance and returns the parsed
     # DOM. A browser is spun up per fetch rather than reused across calls, so
     # a crashed or hung Chrome process can never outlive a single scrape —
     # important for the unattended scheduled pulls this feeds into.
     #
-    # The mutex guarantees only one page is ever loading through this client
-    # at a time — nothing in this codebase currently fetches concurrently,
-    # but this makes it a hard invariant rather than an incidental side
-    # effect of today's call sites staying sequential.
-    def fetch(url)
-      @mutex.synchronize do
-        sleep(rand(5..15))
-        browser = Ferrum::Browser.new(headless: true, browser_options: { "no-sandbox" => nil })
-        browser.headers.set("User-Agent" => USER_AGENT)
-        browser.goto(url)
-        doc = Nokogiri::HTML(browser.body)
+    # The mutex around #fetch guarantees only one page is ever loading
+    # through this client at a time — nothing in this codebase currently
+    # fetches concurrently, but this makes it a hard invariant rather than
+    # an incidental side effect of today's call sites staying sequential.
+    def fetch_page(url)
+      sleep(rand(5..15))
+      browser = Ferrum::Browser.new(headless: true, browser_options: { "no-sandbox" => nil })
+      browser.headers.set("User-Agent" => USER_AGENT)
+      browser.goto(url)
+      doc = Nokogiri::HTML(browser.body)
 
-        if doc.at_css("title")&.text.to_s.include?("Just a moment")
-          raise ScrapeError, "#{url}: hit a Cloudflare challenge page instead of real content"
-        end
-
-        doc
-      ensure
-        browser&.quit
+      if doc.at_css("title")&.text.to_s.include?("Just a moment")
+        raise ScrapeError, "#{url}: hit a Cloudflare challenge page instead of real content"
       end
+
+      doc
+    ensure
+      browser&.quit
     end
 
     def single_chapter_overview(native_id)
