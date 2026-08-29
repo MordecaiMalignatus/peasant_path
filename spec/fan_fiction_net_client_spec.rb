@@ -51,9 +51,8 @@ RSpec.describe PeasantPath::FanFictionNetClient do
       expect(client.fic_info("https://www.fanfiction.net/s/8872491/1/")[:description]).to start_with("Lorem ipsum dolor sit amet")
     end
 
-    it "downloads the cover image from the resolved absolute URL" do
-      allow(HTTParty).to receive(:get).with("https://www.fanfiction.net/image/2269136/75/").and_return(double(code: 200, body: "image bytes"))
-      expect(client.fic_info("https://www.fanfiction.net/s/8872491/1/")[:cover_image]).to eq "image bytes"
+    it "never fetches a cover image (FanFiction.net's thumbnails aren't worth the extra network call)" do
+      expect(client.fic_info("https://www.fanfiction.net/s/8872491/1/")[:cover_image]).to be_nil
     end
 
     it "returns no volumes, since FanFiction.net has no volume concept" do

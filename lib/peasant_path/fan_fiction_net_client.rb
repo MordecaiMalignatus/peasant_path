@@ -1,5 +1,4 @@
 require "ferrum"
-require "httparty"
 require "nokogiri"
 
 module PeasantPath
@@ -62,7 +61,10 @@ module PeasantPath
         description: profile.at_css("> div[style]")&.text&.strip,
         title: profile.at_css("> b")&.text&.strip,
         author: profile.at_css("a[href^='/u/']")&.text&.strip,
-        cover_image: download_cover(profile),
+        # FanFiction.net's cover thumbnails are tiny (180x240 at best) and not
+        # worth a network call that can fail independently of the actual
+        # scrape — this source is intentionally cover-less.
+        cover_image: nil,
         volumes: [],
         volume_covers: {},
       }
@@ -163,17 +165,6 @@ module PeasantPath
     def require_element(doc, selector, context:)
       doc.at_css(selector) || raise(ScrapeError, "#{context}: could not find `#{selector}` in the page " \
       "(FanFiction.net markup may have changed, or an error/challenge page was served)")
-    end
-
-    def download_cover(profile)
-      src = profile.at_css("img.cimage")&.[]("src")
-      return nil if src.nil?
-
-      url = src.start_with?("http") ? src : "https://#{HOST}#{src}"
-      resp = HTTParty.get(url)
-      raise ScrapeError, "cover_image: got unexpected response code #{resp.code} from #{url}" unless resp.code == 200
-
-      resp.body
     end
   end
 end

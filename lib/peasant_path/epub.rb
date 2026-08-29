@@ -53,11 +53,16 @@ module PeasantPath
       book.add_title(title, title_type: GEPUB::TITLE_TYPE::MAIN, lang: "en", display_seq: 1)
       book.add_creator(author, display_seq: 1)
 
-      File.open(cover_path) do |f|
-        book.add_item("img/cover_image.jpg", content: f).cover_image
+      # Not every source provides a cover (FanFiction.net doesn't), so
+      # cover_path may point at a file that was never written.
+      has_cover = cover_path && File.exist?(cover_path)
+      if has_cover
+        File.open(cover_path) do |f|
+          book.add_item("img/cover_image.jpg", content: f).cover_image
+        end
       end
       book.ordered do
-        book.add_item("text/cover.xhtml", content: format_title_page(title, "img/cover_image.jpg")).landmark(type: "cover", title: "cover page")
+        book.add_item("text/cover.xhtml", content: format_title_page(title, has_cover ? "img/cover_image.jpg" : nil)).landmark(type: "cover", title: "cover page")
       end
       book.ordered do
         chapters.each_with_index do |c, i|
@@ -73,6 +78,7 @@ module PeasantPath
 
     def self.format_title_page(title, cover_image_path)
       escaped_title = h(title)
+      img_tag = cover_image_path ? %(<img src="../#{cover_image_path}" />) : ""
       StringIO.new(<<~TEXT)
         <html xmlns="http://www.w3.org/1999/xhtml">
         <head>
@@ -80,7 +86,7 @@ module PeasantPath
          </head>
          <body>
          <h1>#{escaped_title}</h1>
-         <img src="../#{cover_image_path}" />
+         #{img_tag}
          </body></html>
       TEXT
     end

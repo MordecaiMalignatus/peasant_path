@@ -218,6 +218,42 @@ RSpec.describe PeasantPath::Epub do
       expect(xhtml).to include("Sky &lt;Pride&gt; &amp; &quot;Glory&quot;")
       expect(xhtml).not_to include("<Pride>")
     end
+
+    it "omits the cover image tag when there is no cover" do
+      xhtml = described_class.format_title_page("Sky Pride", nil).read
+
+      expect(xhtml).not_to include("<img")
+    end
+  end
+
+  describe ".compile" do
+    it "builds without raising when the cover file doesn't exist on disk (FanFiction.net fics have none)" do
+      expect(described_class).to receive(:format_title_page).with(anything, nil).and_call_original
+
+      expect {
+        described_class.compile(
+          title: "No Cover Fic",
+          author: "Author",
+          cover_path: File.join(tmpdir, "cover_image.jpg"),
+          chapters: [],
+          identifier: "https://www.fanfiction.net/s/1/1/",
+        )
+      }.not_to raise_error
+    end
+
+    it "still embeds the cover when the cover file exists on disk" do
+      cover_path = File.join(tmpdir, "cover_image.jpg")
+      File.write(cover_path, "fake jpeg bytes")
+      expect(described_class).to receive(:format_title_page).with(anything, "img/cover_image.jpg").and_call_original
+
+      described_class.compile(
+        title: "Cover Fic",
+        author: "Author",
+        cover_path: cover_path,
+        chapters: [],
+        identifier: "https://www.royalroad.com/fiction/1/",
+      )
+    end
   end
 
   describe ".format_chapter_in_xhtml" do
