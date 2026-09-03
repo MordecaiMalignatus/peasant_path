@@ -138,6 +138,37 @@ RSpec.describe PeasantPath::RoyalRoadClient do
     end
   end
 
+  describe "#enrich_overview_chapter!" do
+    let(:repository) { instance_double(PeasantPath::DiskRepository) }
+    let(:chapter) do
+      PeasantPath::Chapter.new(
+        "https://www.royalroad.com/fiction/107917/sky-pride/chapter/2113501/chapter-1--in-the-care-of-a-hateful-god",
+        repository
+      )
+    end
+
+    before do
+      allow(PeasantPath::RoyalRoadClient).to receive(:get).with(chapter.uri).and_return(
+        double(code: 200, body: chapter_1_html)
+      )
+    end
+
+    it "removes Royal Road notices hidden from browsers" do
+      result = client.enrich_overview_chapter!(chapter)
+
+      expect(result.chapter_text).not_to include("Unlawfully taken from Royal Road")
+      expect(result.chapter_text).not_to include("cjI1ODQzMGQzNmRjNDQ3ZjVhMjQ3MzkyMGIzMzM1MGJm")
+      expect(result.chapter_text).to include("Where is my son? It is time for him to die.")
+      expect(result.chapter_text).to include("This is usually the point where I say")
+    end
+
+    it "keeps classed chapter elements that are not hidden by the response stylesheet" do
+      result = client.enrich_overview_chapter!(chapter)
+
+      expect(result.chapter_text).to include("cnNiZmVmZWQ1Mzc4MjRjNzE4MWUxZmY5OWRkNWQ0ZDc4")
+    end
+  end
+
   describe "scraping guard rails" do
     it "raises a named ScrapeError when window.volumes is missing from fic_info" do
       allow(PeasantPath::RoyalRoadClient).to receive(:get).and_return(double(code: 200, body: "<html>rate limited</html>"))
