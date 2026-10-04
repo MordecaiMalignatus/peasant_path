@@ -1,5 +1,6 @@
 require "httparty"
 require "nokogiri"
+require "peasant_path/chapter_filter"
 
 module PeasantPath
   class RoyalRoadClient
@@ -79,7 +80,7 @@ module PeasantPath
       nav_buttons = doc.css(".nav-buttons").css(".btn")
       chapter_content = doc.css(".chapter-content")
 
-      remove_hidden_chapter_elements!(doc, chapter_content)
+      ChapterFilter.new.remove_hidden_elements!(doc, chapter_content)
       overview_chapter.chapter_text = chapter_content.to_s
       overview_chapter.chapter_title = doc.css("div.col-md-5.col-lg-6.col-md-offset-1 > h1").text.strip
       overview_chapter.previous_chapter = RoyalRoadClient.extract_button_link(nav_buttons[0])
@@ -107,29 +108,6 @@ module PeasantPath
     end
 
     private
-
-    # Royal Road injects rotating anti-piracy notices into chapter markup and
-    # hides them in browsers with a randomized CSS class. EPUBs do not retain
-    # the page-level stylesheet, so remove only chapter elements whose class is
-    # explicitly marked both display:none and speak:never in the response.
-    def remove_hidden_chapter_elements!(doc, chapter_content)
-      hidden_classes = doc.css("style").flat_map do |style|
-        style.text.scan(/\.([A-Za-z0-9_-]+)\s*\{([^}]*)\}/m).filter_map do |class_name, declarations|
-          properties = declarations.split(";").filter_map do |declaration|
-            property, value = declaration.split(":", 2).map { |part| part&.strip&.downcase }
-            [property, value] unless property.nil? || value.nil?
-          end.to_h
-
-          class_name if properties["display"] == "none" && properties["speak"] == "never"
-        end
-      end.uniq
-
-      return if hidden_classes.empty?
-
-      chapter_content.css("[class]").each do |element|
-        element.remove unless (element["class"].split & hidden_classes).empty?
-      end
-    end
 
     # Pull the value out of a static `<var> = ...;` JS assignment in the page
     # body. Raises ScrapeError naming the fic and the missing variable when the
