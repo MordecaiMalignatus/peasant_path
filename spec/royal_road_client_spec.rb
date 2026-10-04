@@ -167,6 +167,118 @@ RSpec.describe PeasantPath::RoyalRoadClient do
 
       expect(result.chapter_text).to include("cnNiZmVmZWQ1Mzc4MjRjNzE4MWUxZmY5OWRkNWQ0ZDc4")
     end
+
+    it "removes hidden content regardless of its wording or speak declaration" do
+      text = enrich_chapter_with_css(
+        ".random-a { display: none; } .random-b { display: none; speak: always; }",
+        '<span class="random-a">An unfamiliar notice.</span>' \
+        '<span class="random-b">Another unfamiliar notice.</span>' \
+        '<p>This narrative has been purloined without the author\'s approval.</p>'
+      )
+
+      expect(text).not_to include("unfamiliar notice")
+      expect(text).to include("purloined")
+    end
+
+    it "handles grouped selectors, comments, and important declarations" do
+      text = enrich_chapter_with_css(
+        ".random-a, .random-b { DISPLAY: /* hidden */ NoNe !important; }",
+        '<span class="random-a">First notice.</span>' \
+        '<span class="ordinary random-b">Second notice.</span><p>Visible story.</p>'
+      )
+
+      expect(text).not_to include("notice")
+      expect(text).to include("Visible story.")
+    end
+
+    it "matches compound and scoped selectors without hiding unrelated classes" do
+      text = enrich_chapter_with_css(
+        ".chapter-content > span.notice.hidden { display: none; }",
+        '<span class="notice hidden">Hidden notice.</span>' \
+        '<span class="notice">Visible aside.</span><p class="hidden">Visible paragraph.</p>'
+      )
+
+      expect(text).not_to include("Hidden notice.")
+      expect(text).to include("Visible aside.", "Visible paragraph.")
+    end
+
+    it "respects visible overrides across style blocks and selector specificity" do
+      text = enrich_chapter_with_css(
+        ".notice { display: none; } .chapter-content .kept { display: inline; }",
+        '<span class="notice">Visible later override.</span>' \
+        '<span class="notice kept">Visible more specific override.</span>',
+        extra_head: "<style>.notice { display: inline; } .kept { display: none; }</style>",
+      )
+
+      expect(text).to include("Visible later override.", "Visible more specific override.")
+    end
+
+    it "keeps important hidden declarations ahead of later ordinary overrides" do
+      text = enrich_chapter_with_css(
+        ".notice { display: none !important; display: inline; }",
+        '<span class="notice">Hidden notice.</span><p>Visible story.</p>',
+        extra_head: "<style>.notice { display: inline; }</style>",
+      )
+
+      expect(text).not_to include("Hidden notice.")
+      expect(text).to include("Visible story.")
+    end
+
+    it "resolves each grouped selector at its own specificity" do
+      text = enrich_chapter_with_css(
+        "#unrelated, .notice { display: none; } span.notice { display: inline; }",
+        '<span class="notice">Visible more specific override.</span>'
+      )
+
+      expect(text).to include("Visible more specific override.")
+    end
+
+    it "respects inline display declarations and their importance" do
+      text = enrich_chapter_with_css(
+        ".notice { display: none; } .important { display: none !important; }",
+        '<span class="notice" style="display:inline">Visible inline override.</span>' \
+        '<span class="important" style="display:inline">Hidden important notice.</span>' \
+        '<span class="important" style="display:inline!important">Visible important override.</span>' \
+        '<span style="display:none">Hidden inline notice.</span>'
+      )
+
+      expect(text).to include("Visible inline override.", "Visible important override.")
+      expect(text).not_to include("Hidden important notice.", "Hidden inline notice.")
+    end
+
+    it "does not apply conditional styles or state dependent selectors" do
+      text = enrich_chapter_with_css(
+        "@media print { .notice { display: none; } } .notice:hover { display: none; }",
+        '<span class="notice">Visible notice-shaped story text.</span>',
+        extra_head: '<style media="print">.notice { display: none; }</style>',
+      )
+
+      expect(text).to include("Visible notice-shaped story text.")
+    end
+
+    it "ignores invalid selectors without skipping subsequent hidden rules" do
+      text = enrich_chapter_with_css(
+        ".broken > { display: none; } .notice { display: none; }",
+        '<span class="notice">Hidden notice.</span><p>Visible story.</p>'
+      )
+
+      expect(text).not_to include("Hidden notice.")
+      expect(text).to include("Visible story.")
+    end
+
+    def enrich_chapter_with_css(styles, content, extra_head: "")
+      html = <<~HTML
+        <html><head><style>#{styles}</style>#{extra_head}</head><body>
+          <div class="nav-buttons"><a class="btn" disabled>Previous</a><a class="btn" disabled>Next</a></div>
+          <div class="col-md-5 col-lg-6 col-md-offset-1"><h1>Test chapter</h1></div>
+          <div class="chapter-content">#{content}</div>
+        </body></html>
+      HTML
+      allow(PeasantPath::RoyalRoadClient).to receive(:get).with(chapter.uri).and_return(
+        double(code: 200, body: html)
+      )
+      client.enrich_overview_chapter!(chapter).chapter_text
+    end
   end
 
   describe "scraping guard rails" do

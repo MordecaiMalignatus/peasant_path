@@ -15,6 +15,7 @@ Gem::Specification.new do |spec|
   spec.require_paths = ["lib"]
 
   spec.add_dependency "nokogiri", "~> 1.19"
+  spec.add_dependency "crass", "~> 1.0"
   spec.add_dependency "ffi-icu", "~> 0.6"
   spec.add_dependency "httparty", "~> 0.24.0"
   spec.add_dependency "gepub", "~> 2.0"
