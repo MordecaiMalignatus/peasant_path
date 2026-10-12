@@ -17,12 +17,12 @@ module PeasantPath
       @config = Config.from_config_file(@repo.read_config_file)
     end
 
-    desc "add URL [URL...]", "Follow one or more RoyalRoad stories by URL"
+    desc "add URL [URL...]", "Follow one or more stories by URL (RoyalRoad fiction, Patreon collection or creator)"
     option :name, type: :string, aliases: "-n", desc: "Override display name for the story"
 
     def add(*urls)
       if urls.empty?
-        raise Thor::Error, "Please provide at least one RoyalRoad URL"
+        raise Thor::Error, "Please provide at least one RoyalRoad or Patreon URL"
       end
 
       urls.each do |url|
@@ -115,6 +115,87 @@ module PeasantPath
         @library.pull_fic(f)
         f.book.build_all(Dir.pwd)
       end
+    end
+
+    desc "patreon SUBCOMMAND", "Manage the Patreon browser login (login, status, logout)"
+    subcommand "patreon", Class.new(Thor) {
+      namespace "patreon"
+
+      def self.exit_on_failure?
+        true
+      end
+
+      desc "install", "Install the browser driver and Chromium that Patreon pulls need (requires npm)"
+
+      def install
+        cli = PeasantPath::CLI.patreon_session.install(io: $stdout)
+        puts "Installed #{cli}. Next: 'peasant_path patreon login'."
+      rescue PeasantPath::PatreonSession::NotInstalled => e
+        raise Thor::Error, e.message
+      end
+
+      desc "login", "Open a browser window to log into Patreon; the session is reused for pulls"
+
+      def login
+        name = PeasantPath::CLI.patreon_session.login(profile_dir: PeasantPath::CLI.patreon_profile_dir, io: $stdout)
+        puts "Logged in as #{name}. Patreon pulls will use this session."
+      rescue PeasantPath::PatreonSession::NotInstalled, PeasantPath::PatreonSession::LoginAborted, PeasantPath::PatreonSession::Busy => e
+        raise Thor::Error, e.message
+      end
+
+      desc "status", "Show whether the saved Patreon session is still logged in"
+
+      def status
+        name = PeasantPath::CLI.patreon_session.status(profile_dir: PeasantPath::CLI.patreon_profile_dir)
+        if name
+          puts "Logged in as #{name}."
+        else
+          puts "Not logged in. Run 'peasant_path patreon login'."
+        end
+      rescue PeasantPath::PatreonSession::NotInstalled, PeasantPath::PatreonSession::Busy, PeasantPath::PatreonClient::AuthRequired => e
+        raise Thor::Error, e.message
+      end
+
+      desc "export [FILE]", "Write the saved Patreon login to FILE (default patreon-session.json) for use on another machine"
+
+      def export(path = "patreon-session.json")
+        count = PeasantPath::CLI.patreon_session.export(profile_dir: PeasantPath::CLI.patreon_profile_dir, path: path)
+        puts "Wrote #{count} cookie(s) to #{path}. Treat it like a password; import it with 'peasant_path patreon import #{path}'."
+      rescue PeasantPath::PatreonSession::NotInstalled, PeasantPath::PatreonSession::Busy, PeasantPath::PatreonClient::AuthRequired => e
+        raise Thor::Error, e.message
+      end
+
+      desc "import FILE", "Load a Patreon login written by 'patreon export' into this machine's profile"
+
+      def import(path)
+        name = PeasantPath::CLI.patreon_session.import(profile_dir: PeasantPath::CLI.patreon_profile_dir, path: path)
+        puts "Logged in as #{name}. Patreon pulls will use this session."
+      rescue PeasantPath::PatreonSession::NotInstalled, PeasantPath::PatreonSession::LoginAborted, PeasantPath::PatreonSession::Busy => e
+        raise Thor::Error, e.message
+      rescue Errno::ENOENT, JSON::ParserError, KeyError => e
+        raise Thor::Error, "could not read #{path}: #{e.message}"
+      end
+
+      desc "logout", "Forget the saved Patreon session (deletes the browser profile)"
+
+      def logout
+        if PeasantPath::CLI.patreon_session.logout(profile_dir: PeasantPath::CLI.patreon_profile_dir)
+          puts "Patreon session removed."
+        else
+          puts "No Patreon session saved."
+        end
+      end
+    }
+
+    # Required on use rather than at boot so that RoyalRoad-only runs never
+    # touch the browser driver.
+    def self.patreon_session
+      require "peasant_path/patreon_session"
+      PatreonSession
+    end
+
+    def self.patreon_profile_dir
+      Library::PATREON_PROFILE_DIR
     end
 
     desc "install", "Install an auto-refresh scheduler for the detected OS (systemd/launchd), falling back to in-process scheduling"

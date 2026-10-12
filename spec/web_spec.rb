@@ -77,6 +77,20 @@ RSpec.describe PeasantPath::Web do
       expect(last_response.body).to include("Sky Pride")
     end
 
+    it "labels each story with its source" do
+      repo.write_config_file(JSON.generate(followed_stories: ["patreon-col-1522125", fic_id]))
+      repo.write_fic_info("patreon-col-1522125", JSON.generate(
+        title: "Path of the Deathless", author: "OstensibleMammal", volumes: [],
+        source: "patreon", uri: "https://www.patreon.com/collection/1522125", source_ref: { collection_id: "1522125" },
+      ))
+      repo.write_fic_info(fic_id, JSON.generate(title: "Sky Pride", author: "Author", volumes: []))
+
+      get "/"
+
+      expect(last_response.body).to include("OstensibleMammal &middot; Patreon &middot;")
+      expect(last_response.body).to include("Author &middot; Royal Road &middot;")
+    end
+
     it "escapes dynamic story output" do
       follow_fic(title: "Sky <script>alert(1)</script>", volumes: [{ "id" => 10395, "title" => "Vol <b>1</b>" }])
       FileUtils.mkdir_p(repo.build_dir(fic_id))
@@ -170,10 +184,20 @@ RSpec.describe PeasantPath::Web do
       expect(jobs.runs).to eq 1
     end
 
+    it "follows a Patreon collection and queues its first pull" do
+      post "/follow", url: "https://www.patreon.com/collection/1522125?view=expanded"
+      expect(last_response.status).to eq 302
+      expect(library.config.followed_stories).to include("patreon-col-1522125")
+      expect(jobs.runs).to eq 1
+
+      follow_redirect!
+      expect(last_response.body).to include("Now following")
+    end
+
     it "rejects a non-RoyalRoad URL with a flash and no job" do
       post "/follow", url: "https://example.com/fiction/1/"
       follow_redirect!
-      expect(last_response.body).to include("is not a RoyalRoad URL")
+      expect(last_response.body).to include("is not a RoyalRoad or Patreon URL")
       expect(library.config.followed_stories).to be_empty
       expect(jobs.runs).to eq 0
     end

@@ -6,15 +6,18 @@ module PeasantPath
   class Fic
     class MissingState < StandardError; end
 
-    FIC_ID_REGEX = /https:\/\/www\.royalroad\.com\/fiction\/(\d+)\//
-
-    attr_accessor :title, :uri, :author, :description, :display_name, :volumes, :stats
+    attr_accessor :title, :uri, :author, :description, :display_name, :volumes, :stats, :source, :source_ref
     attr_reader :fic_id, :repository
 
-    def initialize(fic_id:, repository:)
+    # RoyalRoad is the default source: fic_info.json files without source
+    # keys are RoyalRoad fics, and their numeric id is enough to rebuild the
+    # URI.
+    def initialize(fic_id:, repository:, source: Sources::ROYALROAD, uri: nil, source_ref: {})
       @repository = repository
       @fic_id = fic_id
-      @uri = "https://www.royalroad.com/fiction/#{fic_id}/"
+      @source = source
+      @uri = uri || Sources.royalroad_uri(fic_id)
+      @source_ref = source_ref
       @chapters = nil
       @title = nil
       @author = nil
@@ -43,9 +46,19 @@ module PeasantPath
       @display_name || @title
     end
 
+    def patreon?
+      @source == Sources::PATREON
+    end
+
     def self.from_disk(fic_id, repository)
       content = repository.read_fic_info(fic_id)
-      fic = new(fic_id: fic_id, repository: repository)
+      fic = new(
+        fic_id: fic_id,
+        repository: repository,
+        source: content["source"] || Sources::ROYALROAD,
+        uri: content["uri"],
+        source_ref: content["source_ref"] || {},
+      )
       fic.author = content["author"]
       fic.title = content["title"]
       fic.description = content["description"]
@@ -72,6 +85,7 @@ module PeasantPath
       @description = info[:description]
       @volumes = info[:volumes]
       @volume_covers = info[:volume_covers]
+      @source_ref = @source_ref.merge(info[:source_ref]) if info[:source_ref]
 
       self
     end
@@ -103,8 +117,9 @@ module PeasantPath
       Epub.new(self)
     end
 
-    # The RR fic ID found in the URL is considered the canon identifier of a fic,
-    # after that, title and author and description are all mutable.
+    # The fic ID (RoyalRoad's numeric id, or the source-prefixed id Sources
+    # derives for Patreon) is the canonical identifier of a fic; title, author
+    # and description are all mutable.
     #
     # Cover bytes are only written when we actually have them (i.e. after a
     # fresh #fetch_fic_info). A fic loaded via #from_disk carries nil covers, so
@@ -112,7 +127,18 @@ module PeasantPath
     # data — only the metadata JSON is rewritten in that case.
     def persist_fic_info
       chapters = self.chapters.map(&:to_slug)
-      info = { schema_version: Config::SCHEMA_VERSION, author: @author, title: @title, display_name: @display_name, description: @description, volumes: @volumes, chapters: chapters }
+      info = {
+        schema_version: Config::SCHEMA_VERSION,
+        source: @source,
+        uri: @uri,
+        source_ref: @source_ref,
+        author: @author,
+        title: @title,
+        display_name: @display_name,
+        description: @description,
+        volumes: @volumes,
+        chapters: chapters,
+      }
       info[:stats] = @stats if @stats
       @repository.write_fic_info_hash(@fic_id, info)
 
@@ -120,13 +146,6 @@ module PeasantPath
       @volume_covers&.each do |volume_id, image_data|
         @repository.write_volume_cover_image(@fic_id, volume_id, image_data)
       end
-    end
-
-    # Returns the fic ID embedded in a RoyalRoad story URL, or nil if the URL
-    # doesn't contain a /fiction/<id>/ path. Callers that require a story URL
-    # should treat nil as "not a story URL".
-    def self.uri_to_fic_id(uri)
-      FIC_ID_REGEX.match(uri)&.[](1)
     end
   end
 end

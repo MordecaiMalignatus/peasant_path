@@ -8,18 +8,37 @@ module PeasantPath
   # pulling new chapters. Both the CLI and the web interface drive it, so the
   # logic lives here rather than inside any one front-end.
   class Library
-    class InvalidURL < StandardError; end
+    # Front-ends rescue Library::InvalidURL; Sources raises it, so keep one
+    # class under both names.
+    InvalidURL = Sources::InvalidURL
 
     DEFAULT_ROOT = "#{Dir.home}/.config/peasant_path".freeze
+    # The Patreon browser profile lives beside the fic state so it is backed
+    # up and wiped together with it. CLI and session code use this one path.
+    PATREON_PROFILE_DIR = File.join(DEFAULT_ROOT, "patreon", "profile").freeze
+    # Where `patreon install` puts the Node driver and Chromium so an installed
+    # gem, which has no checkout to run npm in, can still drive a browser.
+    PATREON_DRIVER_DIR = File.join(DEFAULT_ROOT, "patreon", "driver").freeze
 
     attr_reader :repo
 
     # logger defaults to a silent one so the CLI's own output isn't duplicated;
     # the web/daemon injects a real logger to record pulls and rebuilds.
-    def initialize(repo: DiskRepository.new(DEFAULT_ROOT), logger: Logger.new(File::NULL), client: RoyalRoadClient.new)
+    #
+    # client: is the RoyalRoad client. Patreon has no long-lived client: every
+    # Patreon request has to go through the logged-in browser, so a
+    # PatreonClient is built per pull around one browser session from
+    # patreon_session: (anything answering .open(profile_dir:) { |transport| }).
+    # patreon_client_for: turns that transport into a client, so a test double
+    # can stand in for the client without bypassing the session handling.
+    def initialize(repo: DiskRepository.new(DEFAULT_ROOT), logger: Logger.new(File::NULL), client: RoyalRoadClient.new,
+                   patreon_session: nil, patreon_profile_dir: PATREON_PROFILE_DIR, patreon_client_for: nil)
       @repo = repo
       @logger = logger
-      @client = client
+      @royalroad = RoyalRoadSource.new(client)
+      @patreon_session = patreon_session
+      @patreon_profile_dir = patreon_profile_dir
+      @patreon_client_for = patreon_client_for || ->(transport) { PatreonClient.new(transport: transport, logger: @logger) }
     end
 
     def config
@@ -30,12 +49,13 @@ module PeasantPath
       config.followed_stories.map { |fic_id| Fic.from_disk(fic_id, @repo) }
     end
 
-    # Follow a RoyalRoad story by URL. Idempotent: following an already-followed
-    # story is a no-op. Returns a result hash:
+    # Follow a RoyalRoad or Patreon story by URL. Idempotent: following an
+    # already-followed story is a no-op. Returns a result hash:
     #   { fic_id:, followed: true,  fic: <Fic> }  when newly followed
     #   { fic_id:, followed: false }              when already followed
     def follow(url, name: nil)
-      fic_id = validate_story_url(url)
+      resolved = Sources.resolve(url)
+      fic_id = resolved[:fic_id]
       cfg = config
       return { fic_id: fic_id, followed: false } if cfg.followed_stories.include?(fic_id)
 
@@ -44,7 +64,7 @@ module PeasantPath
       # shows up immediately, and leave the metadata, covers and chapters to the
       # background pull the caller queues. Otherwise the "fast" follow action
       # would block the web request on several CDN cover downloads.
-      fic = Fic.new(fic_id: fic_id, repository: @repo)
+      fic = Fic.new(fic_id: fic_id, repository: @repo, source: resolved[:source], uri: resolved[:uri], source_ref: resolved[:source_ref])
       fic.display_name = name
       fic.persist_fic_info
       @repo.write_config(cfg)
@@ -92,26 +112,38 @@ module PeasantPath
     def pull_all(throttle: false)
       results = []
       log_entry = { timestamp: Time.now.iso8601, fics: [] }
+      record = lambda do |fic, new_chapters, error|
+        results << { fic: fic, new_chapters: new_chapters, error: error }
+        entry = { fic_id: fic.fic_id, title: fic.display_title, new_chapters: new_chapters.map(&:chapter_title) }
+        entry[:error] = error if error
+        log_entry[:fics] << entry
+      end
+      pull_one = lambda do |fic, client|
+        new_chapters = pull_fic_with(fic, client, throttle: throttle)
+        @logger.info("#{fic.display_title}: #{new_chapters.size} new chapter(s)") if new_chapters.any?
+        record.call(fic, new_chapters, nil)
+      rescue => e
+        @logger.warn("#{fic.display_title}: pull failed: #{e.message}")
+        record.call(fic, [], e.message)
+      end
 
-      followed.each do |fic|
+      # Fics are pulled grouped by source so one browser session serves every
+      # Patreon fic. If the session itself fails (not installed, not logged in,
+      # browser gone), the fics not yet pulled get that error in the log rather
+      # than the whole pull aborting; fics already recorded keep their entry.
+      followed.group_by(&:source).each do |source, fics|
+        pending = fics.dup
         begin
-          new_chapters = pull_fic(fic, throttle: throttle)
-          results << { fic: fic, new_chapters: new_chapters, error: nil }
-          @logger.info("#{fic.display_title}: #{new_chapters.size} new chapter(s)") if new_chapters.any?
-          log_entry[:fics] << {
-            fic_id: fic.fic_id,
-            title: fic.display_title,
-            new_chapters: new_chapters.map(&:chapter_title),
-          }
+          with_client(source) do |client|
+            until pending.empty?
+              fic = pending.first
+              pull_one.call(fic, client)
+              pending.shift
+            end
+          end
         rescue => e
-          @logger.warn("#{fic.display_title}: pull failed: #{e.message}")
-          results << { fic: fic, new_chapters: [], error: e.message }
-          log_entry[:fics] << {
-            fic_id: fic.fic_id,
-            title: fic.display_title,
-            new_chapters: [],
-            error: e.message,
-          }
+          @logger.warn("#{Sources.label(source)} session unavailable: #{e.message}")
+          pending.each { |fic| record.call(fic, [], e.message) }
         end
       end
 
@@ -119,19 +151,60 @@ module PeasantPath
       results
     end
 
+    # Pull a single fic, opening a browser session if its source needs one.
     def pull_fic(fic, throttle: false)
-      @client.throttle = throttle
-      chapters = fic.chapters
-      chapter_toc = @client.chapter_overview(fic.fic_id).map { |chapter_hash| Chapter.from_overview_hash(chapter_hash, @repo) }
-      chapters_to_pull = chapter_toc.filter { |rr_chapter| !chapters.include?(rr_chapter) }
+      with_client(fic.source) { |client| pull_fic_with(fic, client, throttle: throttle) }
+    end
 
-      fic.apply_fic_info(@client.fic_info(fic.uri.to_s))
+    # The source-independent pull: refresh metadata first (a Patreon creator
+    # fic learns its campaign id here), then fetch only the chapters that are
+    # not on disk yet. Chapters are write-once, so known ones are never
+    # re-fetched.
+    def pull_fic_with(fic, client, throttle: false)
+      client.throttle = throttle
+      chapters = fic.chapters
+
+      fic.apply_fic_info(client.fic_info(fic))
       fic.persist_fic_info
 
-      new_chapters = chapters_to_pull.map { |chapter| @client.enrich_overview_chapter!(chapter).persist }
+      chapter_toc = client.chapter_overview(fic, known_ids: chapters.map(&:chapter_id))
+      chapters_to_pull = chapter_toc.reject { |chapter| chapters.include?(chapter) }
+
+      new_chapters = chapters_to_pull.map { |chapter| client.enrich_overview_chapter!(chapter).persist }
       chapters.concat(new_chapters)
       fic.refresh_stats!
       new_chapters
+    end
+
+    # Yields the client for a source, holding whatever session it needs for
+    # the duration of the block.
+    def with_client(source, &block)
+      case source
+      when Sources::PATREON then with_patreon_client(&block)
+      else yield @royalroad
+      end
+    end
+
+    # A logged-out session is not an error to Patreon: locked posts simply
+    # come back unviewable, which would look like "nothing new" forever. So
+    # the login is verified once per session before any fic is pulled.
+    def with_patreon_client
+      result = nil
+      patreon_session.open(profile_dir: @patreon_profile_dir) do |transport|
+        client = @patreon_client_for.call(transport)
+        client.verify_login!
+        result = yield client
+      end
+      result
+    end
+
+    # Loaded on first use so that opening the library never pulls in the
+    # browser driver for RoyalRoad-only runs.
+    def patreon_session
+      @patreon_session ||= begin
+          require "peasant_path/patreon_session"
+          PatreonSession
+        end
     end
 
     # Rebuild the combined and per-volume EPUBs for a fic into the repo's build
@@ -212,25 +285,6 @@ module PeasantPath
       fic_data
     end
 
-    # Validate that +url+ is a RoyalRoad story URL and return its fic ID.
-    # Every "this isn't a story URL" case — a malformed string, a non-RoyalRoad
-    # host, or a RoyalRoad URL without a /fiction/<id>/ path — raises InvalidURL
-    # so front-ends have a single error type to rescue.
-    def validate_story_url(url)
-      begin
-        uri = URI(url)
-      rescue URI::InvalidURIError
-        raise InvalidURL, "'#{url}' is not a valid URL"
-      end
-
-      unless uri.host == "www.royalroad.com"
-        raise InvalidURL, "'#{url}' is not a RoyalRoad URL"
-      end
-
-      fic_id = Fic.uri_to_fic_id(uri.to_s)
-      raise InvalidURL, "'#{url}' is not a RoyalRoad story URL" if fic_id.nil?
-
-      fic_id
-    end
+    private :pull_fic_with, :with_client, :with_patreon_client, :patreon_session
   end
 end

@@ -22,6 +22,9 @@ Gem::Specification.new do |spec|
   spec.add_dependency "sinatra", "~> 4.1"
   spec.add_dependency "puma", "~> 6.4"
   spec.add_dependency "rackup", "~> 2.2"
+  # Pinned to the patch level: the Node driver in package.json must match
+  # Playwright::COMPATIBLE_PLAYWRIGHT_VERSION exactly.
+  spec.add_dependency "playwright-ruby-client", "~> 1.64.0"
 
   spec.add_development_dependency "rspec", "~> 3.13"
   spec.add_development_dependency "pry", "~> 0.16.0"
