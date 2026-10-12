@@ -1,1 +1,3 @@
 /peasant_path-0.1.0.gem
+.playwright-mcp/
+node_modules/

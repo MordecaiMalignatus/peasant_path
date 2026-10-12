@@ -9,6 +9,7 @@ RSpec.describe PeasantPath::Epub do
     instance_double(
       PeasantPath::Fic,
       fic_id: "107917",
+      uri: "https://www.royalroad.com/fiction/107917/",
       display_title: "Sky Pride",
       author: "Warby Picus",
       repository: mock_repo,
@@ -50,6 +51,16 @@ RSpec.describe PeasantPath::Epub do
         chapters: [],
         identifier: "https://www.royalroad.com/fiction/107917/",
       )
+    end
+
+    it "uses the fic's own uri as the identifier for a Patreon fic" do
+      allow(mock_fic).to receive(:uri).and_return("https://www.patreon.com/collection/1522125")
+      epub = described_class.new(mock_fic)
+      allow(described_class).to receive(:compile).and_return(mock_book)
+
+      epub.build(tmpdir)
+
+      expect(described_class).to have_received(:compile).with(hash_including(identifier: "https://www.patreon.com/collection/1522125"))
     end
 
     it "writes the epub into the given directory under the fic title" do
@@ -221,13 +232,21 @@ RSpec.describe PeasantPath::Epub do
 
   describe ".format_chapter_in_xhtml" do
     it "escapes the chapter title while preserving chapter HTML" do
-      chapter = instance_double(PeasantPath::Chapter, chapter_id: "123456", chapter_title: "Ch <1>", chapter_text: "<p>Content</p>")
+      chapter = instance_double(PeasantPath::Chapter, chapter_id: "123456", anchor_id: "rr-ch-123456", chapter_title: "Ch <1>", chapter_text: "<p>Content</p>")
 
       xhtml = described_class.format_chapter_in_xhtml(chapter).read
 
       expect(xhtml).to include("Ch &lt;1&gt;")
       expect(xhtml).to include('<h2 id="rr-ch-123456">')
       expect(xhtml).to include("<p>Content</p>")
+    end
+
+    it "uses the chapter's source-specific anchor" do
+      chapter = instance_double(PeasantPath::Chapter, chapter_id: "1", anchor_id: "pt-ch-1", chapter_title: "IX-34 New Exit", chapter_text: "<div class=\"chapter-content\"><p>Text</p></div>")
+
+      xhtml = described_class.format_chapter_in_xhtml(chapter).read
+
+      expect(xhtml).to include('<h2 id="pt-ch-1">IX-34 New Exit</h2>')
     end
   end
 end

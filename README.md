@@ -1,6 +1,7 @@
 # Peasant Path - Because EPubs are nice.
 
-This is a small incremental scraper for RoyalRoad fics. It follows stories and
+This is a small incremental scraper for RoyalRoad fics and Patreon
+collections or creator feeds. It follows stories and
 persists any new chapters to disk. It then can also assemble EPUBs based on
 these scraped chapters.
 
@@ -98,6 +99,49 @@ supports neither systemd nor launchd), `serve` runs an in-process loop on the
 same interval. Override behaviour with `PEASANT_PATH_SCHEDULER` (`off` /
 `internal` / `external`) and the cadence with `PEASANT_PATH_INTERVAL_HOURS`
 (default 6).
+
+## Patreon
+
+Patreon collections and creator feeds can be followed too. Patreon sits behind
+Cloudflare's browser fingerprinting, so the scraper drives a real Chromium
+through Playwright rather than plain HTTP. That needs Node:
+
+```sh
+peasant_path patreon install      # one-off: npm-installs the driver and Chromium under ~/.config/peasant_path
+peasant_path patreon login        # opens a browser window; sign in once
+peasant_path patreon status       # who the saved session belongs to
+peasant_path patreon logout       # forget the saved browser profile
+```
+
+`patreon install` needs `npm` on the PATH and puts everything under
+`~/.config/peasant_path/patreon/driver/`, so it works for an installed gem as
+well as a checkout. (From a checkout, `bin/install_system_dependencies` does
+the same into `./node_modules`, which the driver lookup also checks.) On Linux,
+Chromium additionally needs system libraries: `sudo <driver>/node_modules/.bin/playwright-core install-deps chromium`.
+
+### Moving the login to another machine
+
+The login lives in a browser profile under `~/.config/peasant_path/patreon/`.
+Three ways to get a logged-in session onto a fresh machine:
+
+1. **It has a display:** run `peasant_path patreon login` there.
+2. **It is headless (a server, a container host):** on a machine where you
+   are logged in, run `peasant_path patreon export` to write
+   `patreon-session.json`, copy that file over, then run
+   `peasant_path patreon import patreon-session.json` on the target. The file
+   holds your session cookie, so treat it like a password and delete it
+   after importing.
+3. **Cloning the whole state:** copying `~/.config/peasant_path` carries the
+   profile along; Playwright's Chromium stores its cookies without tying them
+   to the machine's keychain, so the login survives the move.
+
+A Patreon session lasts about a year; `patreon status` tells you when it has
+expired, and a failed pull says so in the pull log.
+
+The login is kept in a browser profile under `~/.config/peasant_path/patreon/`
+and reused headlessly by every pull. Royal Road-only setups never need Node.
+Patreon support is host-only: the container image ships without Node and
+Chromium, so Patreon stories in it fail with a clear "not installed" message.
 
 ## Development
 

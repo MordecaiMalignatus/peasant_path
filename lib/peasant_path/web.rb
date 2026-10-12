@@ -83,6 +83,7 @@ module PeasantPath
           end
           {
             fic: fic,
+            source_label: Sources.label(fic.source),
             chapter_count: fic.chapter_count,
             word_count: fic.word_count_estimate,
             full_available: File.exist?(full),

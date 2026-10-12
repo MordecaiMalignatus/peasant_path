@@ -252,3 +252,192 @@ RSpec.describe PeasantPath::Library do
     end
   end
 end
+
+RSpec.describe PeasantPath::Library, "with Patreon fics" do
+  let(:tmpdir) { Dir.mktmpdir }
+  let(:repo) { PeasantPath::DiskRepository.new(tmpdir) }
+  let(:mock_rr) { instance_double(PeasantPath::RoyalRoadClient) }
+  let(:fake_patreon) { instance_double(PeasantPath::PatreonClient, verify_login!: true) }
+  let(:session_error) { nil }
+  let(:error_after_block) { nil }
+  # Stands in for PatreonSession: yields a transport token, optionally failing
+  # before the block (not installed) or after it (browser went away on close).
+  let(:fake_session) do
+    Class.new do
+      attr_reader :opens
+
+      def initialize(before, after)
+        @before = before
+        @after = after
+        @opens = 0
+      end
+
+      def open(profile_dir:)
+        @opens += 1
+        raise @before if @before
+        result = yield :transport
+        raise @after if @after
+        result
+      end
+    end.new(session_error, error_after_block)
+  end
+  let(:library) do
+    described_class.new(
+      repo: repo, client: mock_rr,
+      patreon_session: fake_session,
+      patreon_profile_dir: File.join(tmpdir, "profile"),
+      patreon_client_for: ->(_transport) { fake_patreon },
+    )
+  end
+  let(:url) { "https://www.patreon.com/collection/1522125?view=expanded" }
+  let(:fic_id) { "patreon-col-1522125" }
+
+  after { FileUtils.rm_rf(tmpdir) }
+
+  def patreon_chapter(fic, id, order)
+    chapter = PeasantPath::Chapter.new("https://www.patreon.com/u84402213/posts/x-#{id}", fic_id: fic.fic_id, chapter_id: id, source: "patreon", repository: repo)
+    chapter.chapter_title = "Chapter #{order}"
+    chapter.chapter_text = "<div class=\"chapter-content\"><p>Words here.</p></div>"
+    chapter.order_number = order
+    chapter
+  end
+
+  def stub_successful_patreon_pull
+    allow(fake_patreon).to receive(:throttle=)
+    allow(fake_patreon).to receive(:fic_info).and_return(
+      title: "Path of the Deathless", author: "OstensibleMammal", description: "", cover_image: "png",
+      volumes: [], volume_covers: {}, source_ref: { "campaign_id" => "9755002" },
+    )
+    allow(fake_patreon).to receive(:chapter_overview) do |fic, known_ids:|
+      [patreon_chapter(fic, "130012200", 0), patreon_chapter(fic, "130012322", 1)]
+    end
+    allow(fake_patreon).to receive(:enrich_overview_chapter!) { |chapter| chapter }
+  end
+
+  describe "#follow" do
+    it "records the source, canonical uri and source_ref without touching the network" do
+      result = library.follow(url)
+
+      expect(result[:followed]).to be true
+      expect(result[:fic_id]).to eq fic_id
+      info = repo.read_fic_info(fic_id)
+      expect(info).to include("source" => "patreon", "uri" => "https://www.patreon.com/collection/1522125", "source_ref" => { "collection_id" => "1522125" })
+    end
+  end
+
+  describe "#pull_all" do
+    before do
+      library.follow(url)
+      library.follow("https://www.royalroad.com/fiction/107917/sky-pride")
+      allow(mock_rr).to receive(:throttle=)
+      allow(mock_rr).to receive(:fic_info).and_return(title: "Sky Pride", author: "A", description: "", cover_image: "img", volumes: [], volume_covers: {})
+      allow(mock_rr).to receive(:chapter_overview).with("107917").and_return([])
+    end
+
+    it "pulls Patreon fics through a client built on the session's transport and RoyalRoad fics through the RoyalRoad client" do
+      stub_successful_patreon_pull
+      allow(fake_patreon).to receive(:chapter_overview) do |fic, known_ids:|
+        expect(known_ids).to eq []
+        [patreon_chapter(fic, "130012200", 0), patreon_chapter(fic, "130012322", 1)]
+      end
+
+      results = library.pull_all
+      by_id = results.to_h { |r| [r[:fic].fic_id, r] }
+
+      expect(fake_session.opens).to eq 1
+      expect(fake_patreon).to have_received(:verify_login!).once
+      expect(by_id[fic_id][:error]).to be_nil
+      expect(by_id[fic_id][:new_chapters].map(&:chapter_id)).to eq %w[130012200 130012322]
+      expect(by_id["107917"][:new_chapters]).to be_empty
+      info = repo.read_fic_info(fic_id)
+      expect(info["source_ref"]).to eq("collection_id" => "1522125", "campaign_id" => "9755002")
+      expect(info["stats"]["chapter_count"]).to eq 2
+      expect(repo.read_chapter(fic_id, "130012200")).to include("source" => "patreon", "chapter_id" => "130012200")
+    end
+
+    it "reports each fic exactly once, grouped by source in follow order" do
+      stub_successful_patreon_pull
+
+      results = library.pull_all
+
+      expect(results.map { |r| r[:fic].fic_id }).to eq [fic_id, "107917"]
+      expect(repo.read_pull_log.last["fics"].map { |f| f["fic_id"] }).to eq [fic_id, "107917"]
+    end
+
+    it "passes the ids already on disk so the client can stop paginating early" do
+      repo.write_chapter_hash(fic_id, "130012200", { fic_id: fic_id, chapter_id: "130012200", source: "patreon", chapter_uri: "https://www.patreon.com/u84402213/posts/x-130012200", chapter_title: "Chapter 0", chapter_text: "<p>x</p>", order_number: 0 })
+      allow(fake_patreon).to receive(:throttle=)
+      allow(fake_patreon).to receive(:fic_info).and_return(title: "T", author: "A", description: "", cover_image: "png", volumes: [], volume_covers: {})
+      allow(fake_patreon).to receive(:chapter_overview).with(anything, known_ids: ["130012200"]).and_return([])
+
+      results = library.pull_all
+      patreon_result = results.find { |r| r[:fic].fic_id == fic_id }
+
+      expect(patreon_result[:error]).to be_nil
+      expect(patreon_result[:new_chapters]).to be_empty
+    end
+
+    context "when the browser session cannot be opened" do
+      let(:session_error) do
+        require "peasant_path/patreon_session"
+        PeasantPath::PatreonSession::NotInstalled.new("playwright-core not found. Patreon support needs Node")
+      end
+
+      it "records the error against every Patreon fic without aborting the RoyalRoad pulls" do
+        results = library.pull_all
+        by_id = results.to_h { |r| [r[:fic].fic_id, r] }
+
+        expect(by_id["107917"][:error]).to be_nil
+        expect(by_id[fic_id][:error]).to match(/playwright-core not found/)
+        expect(repo.read_pull_log.last["fics"].find { |f| f["fic_id"] == fic_id }["error"]).to match(/playwright-core not found/)
+        expect(fake_patreon).not_to have_received(:verify_login!)
+      end
+    end
+
+    context "when the saved session has expired" do
+      before do
+        allow(fake_patreon).to receive(:verify_login!).and_raise(PeasantPath::PatreonClient::AuthRequired, "Patreon session is not logged in (HTTP 401); run 'peasant_path patreon login'")
+        allow(fake_patreon).to receive(:fic_info)
+      end
+
+      it "turns the expired login into a per-fic error instead of a silent empty pull" do
+        results = library.pull_all
+        by_id = results.to_h { |r| [r[:fic].fic_id, r] }
+
+        expect(by_id[fic_id][:error]).to match(/patreon login/)
+        expect(by_id["107917"][:error]).to be_nil
+        expect(fake_patreon).not_to have_received(:fic_info)
+        expect(repo.read_pull_log.last["fics"].find { |f| f["fic_id"] == fic_id }["error"]).to match(/not logged in/)
+      end
+    end
+
+    context "when the session fails after the fics were pulled" do
+      let(:error_after_block) { RuntimeError.new("Target closed") }
+
+      it "keeps the successful entries and does not record the fics a second time" do
+        stub_successful_patreon_pull
+
+        results = library.pull_all
+
+        expect(results.map { |r| r[:fic].fic_id }).to eq [fic_id, "107917"]
+        patreon_result = results.find { |r| r[:fic].fic_id == fic_id }
+        expect(patreon_result[:error]).to be_nil
+        expect(patreon_result[:new_chapters].size).to eq 2
+        log_ids = repo.read_pull_log.last["fics"].map { |f| f["fic_id"] }
+        expect(log_ids.count(fic_id)).to eq 1
+      end
+    end
+  end
+
+  describe "#pull_fic" do
+    it "opens a session for a single Patreon fic" do
+      stub_successful_patreon_pull
+      fic = library.follow(url)[:fic]
+
+      new_chapters = library.pull_fic(fic)
+
+      expect(new_chapters.size).to eq 2
+      expect(fake_session.opens).to eq 1
+    end
+  end
+end

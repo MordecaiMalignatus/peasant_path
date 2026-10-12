@@ -101,3 +101,46 @@ RSpec.describe PeasantPath::Chapter do
     end
   end
 end
+
+RSpec.describe PeasantPath::Chapter, "with explicit ids (Patreon)" do
+  let(:mock_repo) { double("DiskRepository") }
+  let(:chapter) do
+    described_class.new(
+      "https://www.patreon.com/u84402213/posts/ix-34-new-exit-172080149",
+      fic_id: "patreon-col-1522125", chapter_id: 172080149, source: "patreon", repository: mock_repo,
+    )
+  end
+
+  it "takes ids from the arguments instead of the URL" do
+    expect(chapter.fic_id).to eq "patreon-col-1522125"
+    expect(chapter.chapter_id).to eq "172080149"
+    expect(chapter.source).to eq "patreon"
+    expect(chapter.repository).to eq mock_repo
+  end
+
+  it "uses a source-specific anchor, keeping the RoyalRoad one unchanged" do
+    expect(chapter.anchor_id).to eq "pt-ch-172080149"
+    rr = described_class.new("https://www.royalroad.com/fiction/107917/sky-pride/chapter/2113501/chapter-1", mock_repo)
+    expect(rr.anchor_id).to eq "rr-ch-2113501"
+  end
+
+  it "persists and reloads ids, source and published_at" do
+    chapter.chapter_title = "IX-34 New Exit"
+    chapter.chapter_text = "<p>One two.</p>"
+    chapter.published_at = "2026-10-11T19:01:18.000+00:00"
+    chapter.order_number = 584
+    written = nil
+    allow(mock_repo).to receive(:chapter_exists?).and_return(false)
+    allow(mock_repo).to receive(:write_chapter_hash) { |_, _, hash| written = hash }
+
+    chapter.persist
+    reloaded = described_class.from_disk_content(JSON.parse(JSON.generate(written)), mock_repo)
+
+    expect(written).to include(chapter_id: "172080149", source: "patreon", published_at: "2026-10-11T19:01:18.000+00:00")
+    expect(reloaded).to eq chapter
+    expect(reloaded.source).to eq "patreon"
+    expect(reloaded.anchor_id).to eq "pt-ch-172080149"
+    expect(reloaded.published_at).to eq "2026-10-11T19:01:18.000+00:00"
+    expect(reloaded.order_number).to eq 584
+  end
+end

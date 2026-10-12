@@ -154,3 +154,38 @@ RSpec.describe PeasantPath::Fic do
     end
   end
 end
+
+RSpec.describe PeasantPath::Fic, "source handling" do
+  let(:mock_repo) { instance_double(PeasantPath::DiskRepository) }
+
+  it "defaults a fic without source keys on disk to RoyalRoad" do
+    allow(mock_repo).to receive(:read_fic_info).with("107917").and_return("title" => "Sky Pride")
+
+    fic = described_class.from_disk("107917", mock_repo)
+
+    expect(fic.source).to eq "royalroad"
+    expect(fic.patreon?).to be false
+    expect(fic.uri).to eq "https://www.royalroad.com/fiction/107917/"
+    expect(fic.source_ref).to eq({})
+  end
+
+  it "loads and persists Patreon source keys" do
+    allow(mock_repo).to receive(:read_fic_info).with("patreon-col-1522125").and_return(
+      "source" => "patreon", "uri" => "https://www.patreon.com/collection/1522125",
+      "source_ref" => { "collection_id" => "1522125" }, "title" => "Path of the Deathless",
+    )
+    allow(mock_repo).to receive(:list_chapters).and_return([])
+    allow(mock_repo).to receive(:write_fic_info_hash)
+
+    fic = described_class.from_disk("patreon-col-1522125", mock_repo)
+    fic.apply_fic_info(title: "Path of the Deathless", author: "OstensibleMammal", description: "", volumes: [], volume_covers: {}, source_ref: { "campaign_id" => "9755002" })
+    fic.persist_fic_info
+
+    expect(fic.patreon?).to be true
+    expect(mock_repo).to have_received(:write_fic_info_hash).with("patreon-col-1522125", hash_including(
+      source: "patreon",
+      uri: "https://www.patreon.com/collection/1522125",
+      source_ref: { "collection_id" => "1522125", "campaign_id" => "9755002" },
+    ))
+  end
+end
