@@ -100,6 +100,12 @@ RSpec.describe PeasantPath::Fic do
   end
 
   describe "#display_title" do
+    it "falls back to the fic id while no title has been fetched" do
+      fic = described_class.new(fic_id: "patreon-col-1522125", repository: mock_repo)
+
+      expect(fic.display_title).to eq "patreon-col-1522125"
+    end
+
     it "prefers display_name over title" do
       fic = described_class.new(fic_id: fic_id, repository: mock_repo)
       fic.title = "Sky Pride"

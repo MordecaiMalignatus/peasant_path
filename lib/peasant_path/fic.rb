@@ -42,8 +42,10 @@ module PeasantPath
       @stats&.dig("word_count_estimate")
     end
 
+    # A story needs an identifier from when it is added, and it can't be empty
+    # without breaking the web UI rendering.
     def display_title
-      @display_name || @title
+      @display_name || @title || @fic_id
     end
 
     def patreon?
