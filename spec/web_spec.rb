@@ -65,6 +65,17 @@ RSpec.describe PeasantPath::Web do
   end
 
   describe "GET /" do
+    it "renders a story that has been followed but never successfully pulled" do
+      library.follow("https://www.patreon.com/collection/1522125")
+      library.follow("https://www.royalroad.com/fiction/107917/sky-pride")
+
+      get "/"
+
+      expect(last_response.status).to eq 200
+      expect(last_response.body).to include("patreon-col-1522125")
+      expect(last_response.body).to include("build pending")
+    end
+
     it "renders the add form when nothing is followed" do
       get "/"
       expect(last_response).to be_ok
