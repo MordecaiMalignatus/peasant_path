@@ -13,6 +13,7 @@ module PeasantPath
     end
 
     set :views, File.expand_path("../../views", __dir__)
+    set :public_folder, File.expand_path("../../public", __dir__)
     set :app_logger, LOGGER
     set :library, Library.new(logger: LOGGER)
     set :jobs, PeasantPath::Jobs.new(LOGGER)

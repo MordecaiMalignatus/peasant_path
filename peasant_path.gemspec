@@ -9,7 +9,7 @@ Gem::Specification.new do |spec|
   spec.summary = "Download web fiction from RoyalRoad.com and convert to EPUB"
   spec.required_ruby_version = ">= 3.2"
 
-  spec.files = Dir["lib/**/*.rb", "bin/*", "views/**/*", "config.ru"]
+  spec.files = Dir["lib/**/*.rb", "bin/*", "views/**/*", "public/**/*", "config.ru"]
   spec.bindir = "bin"
   spec.executables = ["peasant_path"]
   spec.require_paths = ["lib"]
