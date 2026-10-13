@@ -1,0 +1,139 @@
+#!/usr/bin/env ruby
+# frozen_string_literal: true
+
+# Builds an EPUB of the Path of the Deathless chapters that are out on Patreon
+# but not yet on Royal Road.
+#
+# The two sources number chapters differently (RR "481 Encirclement" is
+# Patreon "VIII-41 Encirclement"), so chapters are matched by their name with
+# the numbering stripped. The newest RR chapter that can be found on Patreon
+# is the anchor; every Patreon chapter after it goes into the book.
+#
+#   bin/deathless_patreon_ahead [--no-pull] [--output DIR]
+
+$LOAD_PATH.unshift(File.expand_path("../lib", __dir__))
+
+require "optparse"
+require "peasant_path"
+
+module DeathlessPatreonAhead
+  include PeasantPath
+
+  ROYALROAD_URL = "https://www.royalroad.com/fiction/122502/"
+  PATREON_URL = "https://www.patreon.com/collection/1522125"
+
+  # "481 ", "343 (I) " (RR part split), "109(I) ", "VIII-41 ", "II-3Mask"
+  NUMBER_PREFIX = /\A\s*(?:[IVXLC]+-)?\d+\s*(?:\([IVX]+\)\s*)?/
+  SPLIT_PART = /\A\s*\d+\s*\([IVX]+\)/
+
+  module_function
+
+  def run(argv)
+    options = { pull: true, output: Dir.pwd }
+    OptionParser.new do |opts|
+      opts.banner = "Usage: #{File.basename($PROGRAM_NAME)} [--no-pull] [--output DIR]"
+      opts.on("--[no-]pull", "Pull both sources before building (default: on)") { |v| options[:pull] = v }
+      opts.on("-o", "--output DIR", "Directory to write the EPUB to (default: current directory)") { |v| options[:output] = v }
+    end.parse!(argv)
+
+    repo = DiskRepository.new(Library::DEFAULT_ROOT)
+    library = Library.new(repo: repo)
+    royalroad = load_fic(repo, ROYALROAD_URL, create: options[:pull])
+    patreon = load_fic(repo, PATREON_URL, create: options[:pull])
+
+    if options[:pull]
+      [royalroad, patreon].each do |fic|
+        warn "Pulling #{Sources.label(fic.source)}..."
+        warn "  #{library.pull_fic(fic).size} new chapter(s)"
+      end
+    end
+
+    anchor_rr, anchor_pt = find_anchor(royalroad.chapters, patreon.chapters)
+    warn "Newest RR chapter on Patreon: #{squish(anchor_rr.chapter_title)} = #{squish(anchor_pt.chapter_title)}"
+    # RR splits long chapters into parts; if its newest post is one part, the
+    # rest of that chapter is still Patreon-only, so the chapter is included.
+    split = anchor_rr.chapter_title.match?(SPLIT_PART)
+    warn "  RR is mid-way through a split chapter; including it in full." if split
+    ahead = patreon.chapters.select do |c|
+      numbered?(c) && (c.order_number > anchor_pt.order_number || (split && c == anchor_pt))
+    end
+    if ahead.empty?
+      warn "Patreon is not ahead of Royal Road; nothing to build."
+      return
+    end
+
+    path = build(repo, patreon, royalroad, ahead, options[:output])
+    warn "#{ahead.size} chapter(s): #{squish(ahead.first.chapter_title)} .. #{squish(ahead.last.chapter_title)}"
+    puts path
+  end
+
+  # Fics that aren't on disk yet are registered without being followed, so
+  # this script doesn't add them to the scheduled refresh.
+  def load_fic(repo, url, create:)
+    resolved = Sources.resolve(url)
+    Fic.from_disk(resolved[:fic_id], repo)
+  rescue Fic::MissingState
+    abort "#{url} has not been pulled yet; run without --no-pull." unless create
+
+    fic = Fic.new(fic_id: resolved[:fic_id], repository: repo, source: resolved[:source], uri: resolved[:uri], source_ref: resolved[:source_ref])
+    fic.persist_fic_info
+    fic
+  end
+
+  # Aligns the two sources by walking RR's numbered chapters oldest first
+  # (RR chapter ids grow with publication) and advancing through Patreon to
+  # the earliest chapter of the same name. Taking the earliest match keeps a
+  # reused name ("Admission (I)" in two arcs) from jumping ahead, and
+  # unnumbered posts such as release announcements are ignored because both
+  # sites post them at unrelated positions. Parts of one RR split chapter
+  # share a name, so the cursor may stay in place.
+  def find_anchor(rr_chapters, pt_chapters)
+    pt_by_name = pt_chapters.select { |c| numbered?(c) }.group_by { |c| normalize(c.chapter_title) }
+    anchor = nil
+    rr_chapters.select { |c| numbered?(c) }.sort_by { |c| c.chapter_id.to_i }.each do |rr|
+      floor = anchor ? anchor[1].order_number : -1
+      match = pt_by_name.fetch(normalize(rr.chapter_title), []).select { |c| c.order_number >= floor }.min_by(&:order_number)
+      anchor = [rr, match] if match
+    end
+    anchor || abort("No Royal Road chapter name matches a Patreon chapter; cannot tell where Patreon gets ahead.")
+  end
+
+  def numbered?(chapter)
+    chapter.chapter_title.to_s.match?(NUMBER_PREFIX)
+  end
+
+  def squish(text)
+    text.to_s.gsub(/\s+/, " ").strip
+  end
+
+  def normalize(title)
+    title.to_s
+      .sub(NUMBER_PREFIX, "")
+      .tr("[]’‘“”", "()''\"\"")
+      .gsub(/\s+/, " ")
+      .strip
+      .downcase
+  end
+
+  def build(repo, patreon, royalroad, chapters, dir)
+    title = "#{patreon.title} - Patreon ahead of Royal Road " \
+            "(#{squish(chapters.first.chapter_title)} to #{squish(chapters.last.chapter_title)})"
+    cover = [patreon, royalroad].map { |fic| repo.cover_image_path(fic.fic_id) }.find { |p| File.exist?(p) }
+    abort "No cover image on disk for either source; pull first." unless cover
+    book = Epub.compile(
+      title: title,
+      author: patreon.author,
+      cover_path: cover,
+      chapters: chapters,
+      identifier: "#{patreon.uri}#ahead-of-royalroad-#{chapters.first.chapter_id}-#{chapters.last.chapter_id}",
+    )
+    FileUtils.mkdir_p(dir)
+    path = File.join(dir, repo.epub_filename(title))
+    tmp = "#{path}.tmp"
+    book.generate_epub(tmp)
+    File.rename(tmp, path)
+    path
+  end
+end
+
+DeathlessPatreonAhead.run(ARGV)
