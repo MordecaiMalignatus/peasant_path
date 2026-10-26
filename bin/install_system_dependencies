@@ -2,7 +2,7 @@
 set -euo pipefail
 
 usage() {
-  printf 'Usage: %s\n\nInstalls ICU system libraries required by ffi-icu on Ubuntu or macOS,\nplus (when npm is available) the Playwright driver and Chromium used by the\noptional Patreon source.\n' "$0"
+  printf 'Usage: %s\n\nInstalls ICU system libraries required by ffi-icu on Ubuntu or macOS,\nplus (when npm is available) the Playwright driver and Chromium that every\npull goes through.\n' "$0"
 }
 
 if [[ "${1:-}" == "--help" || "${1:-}" == "-h" ]]; then
@@ -45,19 +45,19 @@ case "$(uname -s)" in
     ;;
 esac
 
-# Optional: Patreon support drives a real Chromium through Playwright. The
-# Ruby gem needs the matching Node driver (pinned in package.json) and a
-# browser download. RoyalRoad-only setups can skip this entirely.
+# Both sources turn away plain HTTP clients, so pulls drive a real Chromium
+# through Playwright. The Ruby gem needs the matching Node driver (pinned in
+# package.json) and a browser download.
 repo_root="$(cd "$(dirname "$0")/.." && pwd)"
 if command -v npm >/dev/null 2>&1; then
-  printf '\nInstalling the Playwright driver and Chromium for Patreon support...\n'
+  printf '\nInstalling the Playwright driver and Chromium...\n'
   (cd "$repo_root" && npm install && ./node_modules/.bin/playwright-core install --no-shell chromium)
   if [[ "$(uname -s)" == "Linux" ]]; then
     # Chromium needs a set of shared libraries that a bare server lacks.
     (cd "$repo_root" && sudo ./node_modules/.bin/playwright-core install-deps chromium)
   fi
 else
-  printf '\nnpm not found: skipping Playwright/Chromium. Patreon stories will not work until you\n'
+  printf '\nnpm not found: skipping Playwright/Chromium. Pulls will not work until you\n'
   printf 'install Node and run: npm install && ./node_modules/.bin/playwright-core install --no-shell chromium\n'
 fi
 

@@ -14,7 +14,8 @@ RSpec.describe PeasantPath::Web do
   let(:tmpdir) { Dir.mktmpdir }
   let(:repo) { PeasantPath::DiskRepository.new(tmpdir) }
   let(:mock_rr) { instance_double(PeasantPath::RoyalRoadClient) }
-  let(:library) { PeasantPath::Library.new(repo: repo, client: mock_rr) }
+  let(:rr_session) { Class.new { def open = yield(:transport) }.new }
+  let(:library) { PeasantPath::Library.new(repo: repo, royalroad_session: rr_session, royalroad_client_for: ->(_transport) { mock_rr }) }
   let(:fic_id) { "107917" }
 
   # Records that a background job was requested without spawning a thread or

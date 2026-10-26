@@ -1,11 +1,14 @@
 require "peasant_path"
+require "peasant_path/browser"
 require "tmpdir"
 
 RSpec.describe PeasantPath::Library do
   let(:tmpdir) { Dir.mktmpdir }
   let(:repo) { PeasantPath::DiskRepository.new(tmpdir) }
   let(:mock_rr) { instance_double(PeasantPath::RoyalRoadClient) }
-  let(:library) { described_class.new(repo: repo, client: mock_rr) }
+  # Stands in for RoyalRoadSession: yields a transport token without a browser.
+  let(:rr_session) { Class.new { def open = yield(:transport) }.new }
+  let(:library) { described_class.new(repo: repo, royalroad_session: rr_session, royalroad_client_for: ->(_transport) { mock_rr }) }
   let(:fic_id) { "107917" }
   let(:url) { "https://www.royalroad.com/fiction/107917/sky-pride" }
 
@@ -120,6 +123,19 @@ RSpec.describe PeasantPath::Library do
 
       expect(results.first[:error]).to eq "network down"
       expect(results.first[:new_chapters]).to be_empty
+    end
+
+    context "when the browser cannot be launched" do
+      let(:rr_session) do
+        Class.new { def open = raise(PeasantPath::Browser::NotInstalled, "playwright-core not found") }.new
+      end
+
+      it "records the error against the RoyalRoad fic instead of raising" do
+        results = library.pull_all
+
+        expect(results.first[:error]).to eq "playwright-core not found"
+        expect(repo.read_pull_log.last["fics"].first["error"]).to eq "playwright-core not found"
+      end
     end
   end
 
@@ -283,7 +299,9 @@ RSpec.describe PeasantPath::Library, "with Patreon fics" do
   end
   let(:library) do
     described_class.new(
-      repo: repo, client: mock_rr,
+      repo: repo,
+      royalroad_session: Class.new { def open = yield(:transport) }.new,
+      royalroad_client_for: ->(_transport) { mock_rr },
       patreon_session: fake_session,
       patreon_profile_dir: File.join(tmpdir, "profile"),
       patreon_client_for: ->(_transport) { fake_patreon },

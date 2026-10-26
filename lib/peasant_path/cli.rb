@@ -117,6 +117,24 @@ module PeasantPath
       end
     end
 
+    desc "browser SUBCOMMAND", "Manage the headless browser that every pull goes through (install)"
+    subcommand "browser", Class.new(Thor) {
+      namespace "browser"
+
+      def self.exit_on_failure?
+        true
+      end
+
+      desc "install", "Install the browser driver and Chromium that pulls need (requires npm)"
+
+      def install
+        cli = PeasantPath::CLI.browser.install(io: $stdout)
+        puts "Installed #{cli}."
+      rescue PeasantPath::Browser::NotInstalled => e
+        raise Thor::Error, e.message
+      end
+    }
+
     desc "patreon SUBCOMMAND", "Manage the Patreon browser login (login, status, logout)"
     subcommand "patreon", Class.new(Thor) {
       namespace "patreon"
@@ -125,12 +143,12 @@ module PeasantPath
         true
       end
 
-      desc "install", "Install the browser driver and Chromium that Patreon pulls need (requires npm)"
+      desc "install", "Same as 'browser install'", hide: true
 
       def install
-        cli = PeasantPath::CLI.patreon_session.install(io: $stdout)
+        cli = PeasantPath::CLI.browser.install(io: $stdout)
         puts "Installed #{cli}. Next: 'peasant_path patreon login'."
-      rescue PeasantPath::PatreonSession::NotInstalled => e
+      rescue PeasantPath::Browser::NotInstalled => e
         raise Thor::Error, e.message
       end
 
@@ -187,8 +205,13 @@ module PeasantPath
       end
     }
 
-    # Required on use rather than at boot so that RoyalRoad-only runs never
-    # touch the browser driver.
+    # Required on use rather than at boot so that commands that do not pull
+    # never touch the browser driver.
+    def self.browser
+      require "peasant_path/browser"
+      Browser
+    end
+
     def self.patreon_session
       require "peasant_path/patreon_session"
       PatreonSession
