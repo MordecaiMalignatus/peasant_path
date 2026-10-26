@@ -2,10 +2,12 @@ require "httparty"
 require "nokogiri"
 
 module PeasantPath
+  # Scrapes RoyalRoad pages fetched through an injected transport, which
+  # answers get_text(url) with [status, body] for absolute or site-relative
+  # URLs. The site only answers a browser (see RoyalRoadSession), so this
+  # class never requests its pages directly and can be tested against saved
+  # HTML.
   class RoyalRoadClient
-    include HTTParty
-    base_uri "www.royalroad.com"
-
     # Raised when the page doesn't contain the JS state we scrape — RoyalRoad
     # changed its markup, served an error page, or rate-limited us. Carries the
     # fic and the missing data so an operator sees something actionable instead
@@ -14,23 +16,22 @@ module PeasantPath
 
     # A hung connection must never block the pull thread forever: because Jobs
     # serializes work, one stuck socket would leave the web UI's buttons
-    # disabled until restart. Cap open and read time so a slow request fails and
-    # gets retried on the next pull instead of wedging the daemon.
+    # disabled until restart. Cap open and read time on cover downloads so a
+    # slow request fails and gets retried on the next pull instead of wedging
+    # the daemon.
     HTTP_TIMEOUT_SECONDS = 30
-    open_timeout HTTP_TIMEOUT_SECONDS
-    read_timeout HTTP_TIMEOUT_SECONDS
 
     attr_writer :throttle
 
-    def initialize
+    def initialize(transport:)
+      @transport = transport
       @throttle = false
     end
 
     def fic_info(uri)
-      toc = self.class.get(uri)
-      ensure_success!(toc, "fic page #{uri}")
-      doc = Nokogiri::HTML(toc.body)
-      volumes_json = extract_js_assignment(toc.body, "window.volumes", context: uri)
+      body = get_page(uri, "fic page #{uri}")
+      doc = Nokogiri::HTML(body)
+      volumes_json = extract_js_assignment(body, "window.volumes", context: uri)
       volumes = JSON.parse(volumes_json)
 
       cover_attr = doc.css(".fic-header").css("img").attribute("src")
@@ -56,15 +57,14 @@ module PeasantPath
     # Pick out the chapter titles and their URLs. Returns a list of hashes
     # nicked from the JS of the rendered HTML.
     def chapter_overview(id)
-      toc = self.class.get("/fiction/#{id}/")
-      ensure_success!(toc, "chapter overview #{id}")
+      body = get_page("/fiction/#{id}/", "chapter overview #{id}")
       # There's an embedded script tag that assigns the chapters loaded to the
       # `window.chapters` variable, to render the page without needing to make
       # another API request. The SPA takes this and builds the UI. Extracting
       # this via JS would require running a puppeteered browser, but luckily
       # there is exactly one assignment to state done statically, and we can nab
       # it via string manipulation :v
-      extracted_json = extract_js_assignment(toc.body, "window.chapters", context: "fiction #{id}")
+      extracted_json = extract_js_assignment(body, "window.chapters", context: "fiction #{id}")
 
       JSON.parse(extracted_json)
     end
@@ -73,9 +73,8 @@ module PeasantPath
       raise ArgumentError, "Chapter URI is required" if overview_chapter.uri.nil?
 
       sleep(rand(5..15)) if @throttle
-      resp = self.class.get(overview_chapter.uri)
-      ensure_success!(resp, "chapter #{overview_chapter.uri}")
-      doc = Nokogiri::HTML(resp.body)
+      body = get_page(overview_chapter.uri, "chapter #{overview_chapter.uri}")
+      doc = Nokogiri::HTML(body)
       nav_buttons = doc.css(".nav-buttons").css(".btn")
       chapter_content = doc.css(".chapter-content")
 
@@ -93,9 +92,8 @@ module PeasantPath
       elem.attribute("href").value
     end
 
-    # Covers live on royalroadcdn.com, a different host than base_uri
-    # (www.royalroad.com), so this uses HTTParty.get with the absolute URL
-    # rather than self.class.get, which is scoped to base_uri.
+    # Covers live on royalroadcdn.com, which has no bot check, so they are
+    # downloaded directly rather than through the browser.
     def download_picture(url)
       resp = HTTParty.get(url, open_timeout: HTTP_TIMEOUT_SECONDS, read_timeout: HTTP_TIMEOUT_SECONDS)
       if resp.code != 200
@@ -144,16 +142,22 @@ module PeasantPath
       line.strip.delete_prefix("#{var_name} = ").delete_suffix(";")
     end
 
-    def ensure_success!(response, context)
-      return if response.code == 200
+    def get_page(url, context)
+      status, body = @transport.get_text(url)
+      ensure_success!(status, context)
+      body
+    end
 
-      case response.code
+    def ensure_success!(status, context)
+      return if status == 200
+
+      case status
       when 429
         raise ScrapeError, "#{context}: RoyalRoad returned 429 Too Many Requests"
       when 500..599
-        raise ScrapeError, "#{context}: RoyalRoad returned #{response.code} server error"
+        raise ScrapeError, "#{context}: RoyalRoad returned #{status} server error"
       else
-        raise ScrapeError, "#{context}: RoyalRoad returned HTTP #{response.code}"
+        raise ScrapeError, "#{context}: RoyalRoad returned HTTP #{status}"
       end
     end
   end

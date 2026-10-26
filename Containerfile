@@ -19,15 +19,24 @@ RUN bundle exec gem build ./peasant_path.gemspec \
 
 FROM ruby:4.0.1-slim
 
+# Every pull goes through Playwright's Chromium. The driver and browser live
+# outside HOME so the /data volume does not hide them.
 ENV PEASANT_PATH_SCHEDULER=internal \
     PEASANT_PATH_INTERVAL_HOURS=6 \
-    HOME=/data
+    HOME=/data \
+    PLAYWRIGHT_BROWSERS_PATH=/opt/playwright/browsers \
+    PEASANT_PATH_PLAYWRIGHT_CLI=/opt/playwright/node_modules/.bin/playwright-core
 
 WORKDIR /app
 
+COPY package.json package-lock.json /opt/playwright/
+
 RUN apt-get update \
-  && apt-get install -y --no-install-recommends ca-certificates libicu-dev \
-  && rm -rf /var/lib/apt/lists/* \
+  && apt-get install -y --no-install-recommends ca-certificates libicu-dev nodejs npm \
+  && (cd /opt/playwright && npm ci --no-fund --no-audit) \
+  && /opt/playwright/node_modules/.bin/playwright-core install --with-deps --no-shell chromium \
+  && apt-get purge -y --auto-remove npm \
+  && rm -rf /var/lib/apt/lists/* /root/.npm \
   && useradd --create-home --home-dir /data --shell /usr/sbin/nologin peasant_path \
   && mkdir -p /data/.config/peasant_path \
   && chown -R peasant_path:peasant_path /data

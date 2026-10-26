@@ -82,15 +82,43 @@ RSpec.describe PeasantPath::CLI, "patreon subcommands" do
     expect { described_class.start(%w[patreon import s.json]) }.to raise_error(SystemExit).and output(/could not read s\.json/).to_stderr
   end
 
-  it "installs the driver and points at login next" do
-    allow(session).to receive(:install).with(io: anything).and_return("/state/driver/node_modules/.bin/playwright-core")
+  it "installs the driver from the patreon namespace too, pointing at login next" do
+    browser = double("Browser")
+    allow(PeasantPath::CLI).to receive(:browser).and_return(browser)
+    allow(browser).to receive(:install).with(io: anything).and_return("/state/driver/node_modules/.bin/playwright-core")
 
     expect { described_class.start(%w[patreon install]) }.to output(%r{Installed /state/driver/node_modules/.bin/playwright-core\. Next: 'peasant_path patreon login'}).to_stdout
   end
 
-  it "reports a missing npm as a Thor error" do
-    allow(session).to receive(:install).and_raise(PeasantPath::PatreonSession::NotInstalled, "npm not found on PATH")
+  it "reports a missing npm from the patreon namespace as a Thor error" do
+    browser = double("Browser")
+    allow(PeasantPath::CLI).to receive(:browser).and_return(browser)
+    allow(browser).to receive(:install).and_raise(PeasantPath::Browser::NotInstalled, "npm not found on PATH")
 
     expect { described_class.start(%w[patreon install]) }.to raise_error(SystemExit).and output(/npm not found/).to_stderr
+  end
+end
+
+RSpec.describe PeasantPath::CLI, "browser subcommands" do
+  let(:tmpdir) { Dir.mktmpdir }
+  let(:browser) { double("Browser") }
+
+  before do
+    allow(PeasantPath::DiskRepository).to receive(:new).and_return(PeasantPath::DiskRepository.new(tmpdir))
+    allow(PeasantPath::CLI).to receive(:browser).and_return(browser)
+  end
+
+  after { FileUtils.rm_rf(tmpdir) }
+
+  it "installs the driver" do
+    allow(browser).to receive(:install).with(io: anything).and_return("/state/driver/node_modules/.bin/playwright-core")
+
+    expect { described_class.start(%w[browser install]) }.to output(%r{Installed /state/driver/node_modules/.bin/playwright-core\.}).to_stdout
+  end
+
+  it "reports a missing npm as a Thor error" do
+    allow(browser).to receive(:install).and_raise(PeasantPath::Browser::NotInstalled, "npm not found on PATH")
+
+    expect { described_class.start(%w[browser install]) }.to raise_error(SystemExit).and output(/npm not found/).to_stderr
   end
 end

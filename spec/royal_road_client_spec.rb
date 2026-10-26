@@ -1,7 +1,8 @@
 require "peasant_path"
 
 RSpec.describe PeasantPath::RoyalRoadClient do
-  let(:client) { PeasantPath::RoyalRoadClient.new }
+  let(:transport) { double("transport") }
+  let(:client) { PeasantPath::RoyalRoadClient.new(transport: transport) }
   let(:sky_pride_html) { File.read(File.expand_path("../data/sky-pride.html", __dir__)) }
   let(:chapter_1_html) { File.read(File.expand_path("../data/chapter-1.html", __dir__)) }
 
@@ -28,9 +29,7 @@ RSpec.describe PeasantPath::RoyalRoadClient do
 
   describe "#fic_info" do
     before do
-      allow(PeasantPath::RoyalRoadClient).to receive(:get).and_return(
-        double(code: 200, body: sky_pride_html)
-      )
+      allow(transport).to receive(:get_text).and_return([200, sky_pride_html])
       allow(client).to receive(:download_picture).and_return("mock_image_data")
     end
 
@@ -98,9 +97,7 @@ RSpec.describe PeasantPath::RoyalRoadClient do
 
   describe "#chapter_overview" do
     before do
-      allow(PeasantPath::RoyalRoadClient).to receive(:get).with("/fiction/107917/").and_return(
-        double(code: 200, body: sky_pride_html)
-      )
+      allow(transport).to receive(:get_text).with("/fiction/107917/").and_return([200, sky_pride_html])
     end
 
     it "returns an array of chapter hashes" do
@@ -148,9 +145,7 @@ RSpec.describe PeasantPath::RoyalRoadClient do
     end
 
     before do
-      allow(PeasantPath::RoyalRoadClient).to receive(:get).with(chapter.uri).and_return(
-        double(code: 200, body: chapter_1_html)
-      )
+      allow(transport).to receive(:get_text).with(chapter.uri).and_return([200, chapter_1_html])
     end
 
     it "removes Royal Road notices hidden from browsers" do
@@ -171,7 +166,7 @@ RSpec.describe PeasantPath::RoyalRoadClient do
 
   describe "scraping guard rails" do
     it "raises a named ScrapeError when window.volumes is missing from fic_info" do
-      allow(PeasantPath::RoyalRoadClient).to receive(:get).and_return(double(code: 200, body: "<html>rate limited</html>"))
+      allow(transport).to receive(:get_text).and_return([200, "<html>rate limited</html>"])
       allow(client).to receive(:download_picture).and_return("x")
 
       expect {
@@ -180,9 +175,7 @@ RSpec.describe PeasantPath::RoyalRoadClient do
     end
 
     it "raises a named ScrapeError when window.chapters is missing from chapter_overview" do
-      allow(PeasantPath::RoyalRoadClient).to receive(:get).with("/fiction/107917/").and_return(
-        double(code: 200, body: "<html>error page</html>")
-      )
+      allow(transport).to receive(:get_text).with("/fiction/107917/").and_return([200, "<html>error page</html>"])
 
       expect {
         client.chapter_overview(107917)
@@ -190,9 +183,7 @@ RSpec.describe PeasantPath::RoyalRoadClient do
     end
 
     it "raises a named ScrapeError when RoyalRoad returns 429" do
-      allow(PeasantPath::RoyalRoadClient).to receive(:get).with("/fiction/107917/").and_return(
-        double(code: 429, body: "rate limited")
-      )
+      allow(transport).to receive(:get_text).with("/fiction/107917/").and_return([429, "rate limited"])
 
       expect {
         client.chapter_overview(107917)
@@ -200,9 +191,7 @@ RSpec.describe PeasantPath::RoyalRoadClient do
     end
 
     it "raises a named ScrapeError when RoyalRoad returns a server error" do
-      allow(PeasantPath::RoyalRoadClient).to receive(:get).with("/fiction/107917/").and_return(
-        double(code: 503, body: "unavailable")
-      )
+      allow(transport).to receive(:get_text).with("/fiction/107917/").and_return([503, "unavailable"])
 
       expect {
         client.chapter_overview(107917)

@@ -1,7 +1,7 @@
 {
   "name": "peasant_path",
   "private": true,
-  "description": "Node side of the optional Patreon source: the Playwright driver that playwright-ruby-client talks to. Pinned to Playwright::COMPATIBLE_PLAYWRIGHT_VERSION.",
+  "description": "Node side of the browser every pull goes through: the Playwright driver that playwright-ruby-client talks to. Pinned to Playwright::COMPATIBLE_PLAYWRIGHT_VERSION.",
   "dependencies": {
     "playwright-core": "1.64.0"
   }

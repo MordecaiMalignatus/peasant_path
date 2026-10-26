@@ -6,7 +6,7 @@ module PeasantPath
   class RoyalRoadSource
     attr_reader :client
 
-    def initialize(client = RoyalRoadClient.new)
+    def initialize(client)
       @client = client
     end
 

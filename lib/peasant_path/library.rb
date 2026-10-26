@@ -16,26 +16,29 @@ module PeasantPath
     # The Patreon browser profile lives beside the fic state so it is backed
     # up and wiped together with it. CLI and session code use this one path.
     PATREON_PROFILE_DIR = File.join(DEFAULT_ROOT, "patreon", "profile").freeze
-    # Where `patreon install` puts the Node driver and Chromium so an installed
-    # gem, which has no checkout to run npm in, can still drive a browser.
-    PATREON_DRIVER_DIR = File.join(DEFAULT_ROOT, "patreon", "driver").freeze
+    # Where `browser install` puts the Node driver and Chromium so an installed
+    # gem, which has no checkout to run npm in, can still drive a browser. It is
+    # kept at this path so installs made by `patreon install` keep working.
+    BROWSER_DRIVER_DIR = File.join(DEFAULT_ROOT, "patreon", "driver").freeze
 
     attr_reader :repo
 
     # logger defaults to a silent one so the CLI's own output isn't duplicated;
     # the web/daemon injects a real logger to record pulls and rebuilds.
     #
-    # client: is the RoyalRoad client. Patreon has no long-lived client: every
-    # Patreon request has to go through the logged-in browser, so a
-    # PatreonClient is built per pull around one browser session from
-    # patreon_session: (anything answering .open(profile_dir:) { |transport| }).
-    # patreon_client_for: turns that transport into a client, so a test double
-    # can stand in for the client without bypassing the session handling.
-    def initialize(repo: DiskRepository.new(DEFAULT_ROOT), logger: Logger.new(File::NULL), client: RoyalRoadClient.new,
+    # Every source is fetched through a browser, so no client is long-lived:
+    # one is built per pull around one browser session. royalroad_session:
+    # (anything answering .open { |transport| }) and patreon_session: (the
+    # same, with profile_dir:) provide the sessions; *_client_for: turn a
+    # transport into a client, so a test double can stand in for the client
+    # without bypassing the session handling.
+    def initialize(repo: DiskRepository.new(DEFAULT_ROOT), logger: Logger.new(File::NULL),
+                   royalroad_session: nil, royalroad_client_for: nil,
                    patreon_session: nil, patreon_profile_dir: PATREON_PROFILE_DIR, patreon_client_for: nil)
       @repo = repo
       @logger = logger
-      @royalroad = RoyalRoadSource.new(client)
+      @royalroad_session = royalroad_session
+      @royalroad_client_for = royalroad_client_for || ->(transport) { RoyalRoadClient.new(transport: transport) }
       @patreon_session = patreon_session
       @patreon_profile_dir = patreon_profile_dir
       @patreon_client_for = patreon_client_for || ->(transport) { PatreonClient.new(transport: transport, logger: @logger) }
@@ -128,7 +131,7 @@ module PeasantPath
       end
 
       # Fics are pulled grouped by source so one browser session serves every
-      # Patreon fic. If the session itself fails (not installed, not logged in,
+      # fic of that source. If the session itself fails (not installed, not logged in,
       # browser gone), the fics not yet pulled get that error in the log rather
       # than the whole pull aborting; fics already recorded keep their entry.
       followed.group_by(&:source).each do |source, fics|
@@ -151,7 +154,7 @@ module PeasantPath
       results
     end
 
-    # Pull a single fic, opening a browser session if its source needs one.
+    # Pull a single fic inside a browser session for its source.
     def pull_fic(fic, throttle: false)
       with_client(fic.source) { |client| pull_fic_with(fic, client, throttle: throttle) }
     end
@@ -181,8 +184,16 @@ module PeasantPath
     def with_client(source, &block)
       case source
       when Sources::PATREON then with_patreon_client(&block)
-      else yield @royalroad
+      else with_royalroad_client(&block)
       end
+    end
+
+    def with_royalroad_client
+      result = nil
+      royalroad_session.open do |transport|
+        result = yield RoyalRoadSource.new(@royalroad_client_for.call(transport))
+      end
+      result
     end
 
     # A logged-out session is not an error to Patreon: locked posts simply
@@ -198,12 +209,19 @@ module PeasantPath
       result
     end
 
-    # Loaded on first use so that opening the library never pulls in the
-    # browser driver for RoyalRoad-only runs.
+    # The sessions are loaded on first use so that opening the library never
+    # pulls in the browser driver; only a pull needs it.
     def patreon_session
       @patreon_session ||= begin
           require "peasant_path/patreon_session"
           PatreonSession
+        end
+    end
+
+    def royalroad_session
+      @royalroad_session ||= begin
+          require "peasant_path/royal_road_session"
+          RoyalRoadSession
         end
     end
 
@@ -285,6 +303,6 @@ module PeasantPath
       fic_data
     end
 
-    private :pull_fic_with, :with_client, :with_patreon_client, :patreon_session
+    private :pull_fic_with, :with_client, :with_royalroad_client, :with_patreon_client, :royalroad_session, :patreon_session
   end
 end
