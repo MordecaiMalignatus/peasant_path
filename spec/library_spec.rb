@@ -117,6 +117,29 @@ RSpec.describe PeasantPath::Library do
       )
     end
 
+    it "reports progress as each chapter is saved, before the pull finishes" do
+      events = []
+      results = library.pull_all do |event, fic, detail|
+        events << [event, fic.fic_id, event == :chapter ? detail.chapter_id : detail]
+        expect(repo.chapter_exists?(fic_id, detail.chapter_id)).to be true if event == :chapter
+      end
+
+      expect(events).to eq [
+        [:started, fic_id, nil],
+        [:chapter, fic_id, "2113501"],
+        [:chapter, fic_id, "2113560"],
+        [:finished, fic_id, results.first],
+      ]
+    end
+
+    it "re-raises a failing progress block instead of recording it as the fic's error" do
+      expect { library.pull_all { |event, *| raise Errno::EPIPE if event == :finished } }.to raise_error(Errno::EPIPE)
+
+      log = repo.read_pull_log
+      expect(log.size).to eq 1
+      expect(log.first["fics"].map { |f| [f["fic_id"], f["error"]] }).to eq [[fic_id, nil]]
+    end
+
     it "captures per-fic errors instead of raising" do
       allow(mock_rr).to receive(:chapter_overview).and_raise("network down")
       results = library.pull_all
@@ -128,6 +151,13 @@ RSpec.describe PeasantPath::Library do
     context "when the browser cannot be launched" do
       let(:rr_session) do
         Class.new { def open = raise(PeasantPath::Browser::NotInstalled, "playwright-core not found") }.new
+      end
+
+      it "reports the fic as finished with the error without having started it" do
+        events = []
+        library.pull_all { |event, _fic, detail| events << [event, detail && detail[:error]] }
+
+        expect(events).to eq [[:finished, "playwright-core not found"]]
       end
 
       it "records the error against the RoyalRoad fic instead of raising" do

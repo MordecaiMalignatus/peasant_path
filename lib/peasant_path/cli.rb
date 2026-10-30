@@ -51,14 +51,16 @@ module PeasantPath
     option :throttle, type: :boolean, default: false, desc: "Add 5-15s random delay between chapter downloads to avoid rate limiting"
 
     def pull
-      render_pull_results(@library.pull_all(throttle: options[:throttle]))
+      results = @library.pull_all(throttle: options[:throttle], &pull_progress_printer)
+      print_pull_summary(results)
     end
 
     desc "refresh", "Pull new chapters and rebuild the stories that changed"
     option :throttle, type: :boolean, default: false, desc: "Add 5-15s random delay between chapter downloads to avoid rate limiting"
 
     def refresh
-      render_pull_results(@library.refresh(throttle: options[:throttle]))
+      results = @library.refresh(throttle: options[:throttle], &pull_progress_printer)
+      print_pull_summary(results)
     end
 
     desc "report", "Show what's new per story over a recent time window"
@@ -290,23 +292,35 @@ module PeasantPath
       puts "Tune the cadence with PEASANT_PATH_INTERVAL_HOURS (default #{Scheduler::DEFAULT_INTERVAL_HOURS})."
     end
 
-    def render_pull_results(results)
-      quiet = []
-
-      results.each do |r|
-        f = r[:fic]
-        if r[:error]
-          puts f.display_title
-          puts "  ERROR: #{r[:error]}"
-        elsif r[:new_chapters].any?
-          puts f.display_title
-          r[:new_chapters].each { |c| puts "  #{set_color("+ #{c.chapter_title}", :green, :bold)}" }
-        else
-          quiet << f.display_title
+    # Prints each story as it is pulled, for Library#pull_all's progress
+    # block. Output is unbuffered so a piped or journald-captured run shows
+    # progress live too. A fic whose session failed arrives finished without
+    # having started, so its title is printed with the error.
+    def pull_progress_printer
+      $stdout.sync = true
+      current = nil
+      lambda do |event, fic, detail = nil|
+        case event
+        when :started
+          current = fic
+          puts "#{fic.display_title}…"
+        when :chapter
+          puts "  #{set_color("+ #{detail.chapter_title}", :green, :bold)}"
+        when :finished
+          puts fic.display_title unless current.equal?(fic)
+          if detail[:error]
+            puts "  #{set_color("ERROR: #{detail[:error]}", :red)}"
+          elsif detail[:new_chapters].empty?
+            puts "  no new chapters"
+          end
         end
       end
+    end
 
-      puts "No new chapters: #{quiet.join(", ")}" unless quiet.empty?
+    def print_pull_summary(results)
+      new_count = results.sum { |r| r[:new_chapters].size }
+      errors = results.count { |r| r[:error] }
+      puts "#{new_count} new chapter(s) across #{results.size} stories#{errors.positive? ? ", #{errors} error(s)" : ""}."
     end
 
     def select_fics_with_fzf
