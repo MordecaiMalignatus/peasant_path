@@ -12,7 +12,8 @@ same directory, so anything you do in one shows up in the other.
 ## Browser
 
 Neither site answers a plain HTTP client: RoyalRoad sits behind an Anubis
-proof-of-work check and Patreon behind Cloudflare's browser fingerprinting.
+proof-of-work check and Cloudflare; Patreon behind Cloudflare's browser
+fingerprinting.
 Every pull therefore runs in a headless Chromium driven by Playwright, which
 needs Node:
 

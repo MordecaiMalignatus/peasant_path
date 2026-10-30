@@ -26,6 +26,12 @@ RSpec.describe PeasantPath::Browser do
     path
   end
 
+  describe ".launch_options" do
+    it "hides the automation marker Cloudflare challenges on" do
+      expect(described_class.launch_options(headless: true)[:args]).to include("--disable-blink-features=AutomationControlled")
+    end
+  end
+
   describe ".cli_path" do
     it "prefers PEASANT_PATH_PLAYWRIGHT_CLI when it points at an existing file" do
       override = executable(tmpdir, "override-cli")

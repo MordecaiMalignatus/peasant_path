@@ -2,10 +2,12 @@ require "peasant_path/browser"
 
 module PeasantPath
   # RoyalRoad sits behind Anubis, a proof-of-work interstitial that only a
-  # browser running its JavaScript gets past. A headless Chromium loads the
-  # site once to earn the pass cookie, then fetches every page from inside
-  # that tab so each request carries it. No login is involved, so the context
-  # is throwaway rather than a saved profile.
+  # browser running its JavaScript gets past, and behind Cloudflare, which
+  # challenges browsers that look automated (see Browser.launch_options). A
+  # headless Chromium loads the site once to earn the pass cookie, then
+  # fetches every page from inside that tab so each request carries it. No
+  # login is involved, so the context is throwaway rather than a saved
+  # profile.
   module RoyalRoadSession
     HOME_URL = "https://www.royalroad.com/".freeze
     # Anubis titles its interstitial "Making sure you're not a bot!"; the
