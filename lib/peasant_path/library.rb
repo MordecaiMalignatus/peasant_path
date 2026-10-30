@@ -12,6 +12,10 @@ module PeasantPath
     # class under both names.
     InvalidURL = Sources::InvalidURL
 
+    # Wraps an exception raised by pull_all's progress block (say, the CLI
+    # printing to a closed pipe) so it is not taken for a fic's pull error.
+    class ProgressFailed < StandardError; end
+
     DEFAULT_ROOT = "#{Dir.home}/.config/peasant_path".freeze
     # The Patreon browser profile lives beside the fic state so it is backed
     # up and wiped together with it. CLI and session code use this one path.
@@ -112,19 +116,42 @@ module PeasantPath
     # Pull new chapters for every followed story, append a pull-log entry, and
     # return per-fic results:
     #   [{ fic: <Fic>, new_chapters: [<Chapter>...], error: nil_or_message }, ...]
-    def pull_all(throttle: false)
+    #
+    # A first pull of a long story, or any throttled pull, takes minutes per
+    # story, so progress is reported as it happens through the optional block:
+    #   (:started, fic)          once a fic's metadata (and so its title) is
+    #                            refreshed, before its chapters are fetched
+    #   (:chapter, fic, chapter) after each new chapter is saved
+    #   (:finished, fic, result) once a fic has its result, with the same hash
+    #                            that is returned; a fic that fails before its
+    #                            metadata is in, or whose source session could
+    #                            not be opened, gets this without :started
+    #
+    # An exception from the block aborts the pull and is re-raised as is; the
+    # pull log still gets the fics finished up to that point.
+    def pull_all(throttle: false, &block)
+      progress = lambda do |*event|
+        block&.call(*event)
+      rescue StandardError
+        raise ProgressFailed
+      end
       results = []
       log_entry = { timestamp: Time.now.iso8601, fics: [] }
       record = lambda do |fic, new_chapters, error|
-        results << { fic: fic, new_chapters: new_chapters, error: error }
+        result = { fic: fic, new_chapters: new_chapters, error: error }
+        results << result
         entry = { fic_id: fic.fic_id, title: fic.display_title, new_chapters: new_chapters.map(&:chapter_title) }
         entry[:error] = error if error
         log_entry[:fics] << entry
+        progress.call(:finished, fic, result)
       end
       pull_one = lambda do |fic, client|
-        new_chapters = pull_fic_with(fic, client, throttle: throttle)
+        @logger.info("#{fic.display_title}: pulling")
+        new_chapters = pull_fic_with(fic, client, throttle: throttle, &progress)
         @logger.info("#{fic.display_title}: #{new_chapters.size} new chapter(s)") if new_chapters.any?
         record.call(fic, new_chapters, nil)
+      rescue ProgressFailed
+        raise
       rescue => e
         @logger.warn("#{fic.display_title}: pull failed: #{e.message}")
         record.call(fic, [], e.message)
@@ -144,14 +171,19 @@ module PeasantPath
               pending.shift
             end
           end
+        rescue ProgressFailed
+          raise
         rescue => e
           @logger.warn("#{Sources.label(source)} session unavailable: #{e.message}")
           pending.each { |fic| record.call(fic, [], e.message) }
         end
       end
 
-      @repo.append_pull_log(log_entry)
       results
+    rescue ProgressFailed => e
+      raise e.cause
+    ensure
+      @repo.append_pull_log(log_entry)
     end
 
     # Pull a single fic inside a browser session for its source.
@@ -162,18 +194,23 @@ module PeasantPath
     # The source-independent pull: refresh metadata first (a Patreon creator
     # fic learns its campaign id here), then fetch only the chapters that are
     # not on disk yet. Chapters are write-once, so known ones are never
-    # re-fetched.
+    # re-fetched. Progress goes to the optional block as pull_all describes.
     def pull_fic_with(fic, client, throttle: false)
       client.throttle = throttle
       chapters = fic.chapters
 
       fic.apply_fic_info(client.fic_info(fic))
       fic.persist_fic_info
+      yield :started, fic if block_given?
 
       chapter_toc = client.chapter_overview(fic, known_ids: chapters.map(&:chapter_id))
       chapters_to_pull = chapter_toc.reject { |chapter| chapters.include?(chapter) }
 
-      new_chapters = chapters_to_pull.map { |chapter| client.enrich_overview_chapter!(chapter).persist }
+      new_chapters = chapters_to_pull.map do |chapter|
+        saved = client.enrich_overview_chapter!(chapter).persist
+        yield :chapter, fic, saved if block_given?
+        saved
+      end
       chapters.concat(new_chapters)
       fic.refresh_stats!
       new_chapters
@@ -246,9 +283,10 @@ module PeasantPath
 
     # Pull every followed story and rebuild the ones that changed. The single
     # entry point used by both the systemd refresh job and the in-process
-    # fallback scheduler. Returns the pull_all results.
-    def refresh(throttle: false)
-      results = pull_all(throttle: throttle)
+    # fallback scheduler. Takes the same progress block as pull_all and
+    # returns its results.
+    def refresh(throttle: false, &progress)
+      results = pull_all(throttle: throttle, &progress)
       rebuild_changed(results)
       new_count = results.sum { |r| r[:new_chapters].size }
       errors = results.count { |r| r[:error] }

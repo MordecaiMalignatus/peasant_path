@@ -122,3 +122,44 @@ RSpec.describe PeasantPath::CLI, "browser subcommands" do
     expect { described_class.start(%w[browser install]) }.to raise_error(SystemExit).and output(/npm not found/).to_stderr
   end
 end
+
+RSpec.describe PeasantPath::CLI, "pull" do
+  let(:tmpdir) { Dir.mktmpdir }
+  let(:library) { instance_double(PeasantPath::Library) }
+  let(:fresh) { instance_double(PeasantPath::Fic, display_title: "Sky Pride") }
+  let(:quiet) { instance_double(PeasantPath::Fic, display_title: "Quiet One") }
+  let(:broken) { instance_double(PeasantPath::Fic, display_title: "Locked Away") }
+  let(:chapter) { instance_double(PeasantPath::Chapter, chapter_title: "Chapter 1") }
+
+  before do
+    allow(PeasantPath::DiskRepository).to receive(:new).and_return(PeasantPath::DiskRepository.new(tmpdir))
+    allow(PeasantPath::Library).to receive(:new).and_return(library)
+  end
+
+  after { FileUtils.rm_rf(tmpdir) }
+
+  it "prints each story as its progress events arrive" do
+    allow(library).to receive(:pull_all) do |&progress|
+      fresh_result = { fic: fresh, new_chapters: [chapter], error: nil }
+      quiet_result = { fic: quiet, new_chapters: [], error: nil }
+      broken_result = { fic: broken, new_chapters: [], error: "not logged in" }
+      progress.call(:started, fresh)
+      progress.call(:chapter, fresh, chapter)
+      progress.call(:finished, fresh, fresh_result)
+      progress.call(:started, quiet)
+      progress.call(:finished, quiet, quiet_result)
+      progress.call(:finished, broken, broken_result)
+      [fresh_result, quiet_result, broken_result]
+    end
+
+    expect { described_class.start(%w[pull]) }.to output(<<~OUT).to_stdout
+      Sky Pride…
+        + Chapter 1
+      Quiet One…
+        no new chapters
+      Locked Away
+        ERROR: not logged in
+      1 new chapter(s) across 3 stories, 1 error(s).
+    OUT
+  end
+end
