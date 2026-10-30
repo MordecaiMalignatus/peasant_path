@@ -2,9 +2,9 @@ require "fileutils"
 
 module PeasantPath
   # Locating, installing and launching the Playwright-driven Chromium that
-  # every source fetches through. RoyalRoad sits behind Anubis and Patreon
-  # behind Cloudflare; both turn away plain HTTP clients, so requests are made
-  # from inside a real browser page instead.
+  # every source fetches through. RoyalRoad sits behind Anubis and Cloudflare,
+  # Patreon behind Cloudflare; both turn away plain HTTP clients, so requests
+  # are made from inside a real browser page instead.
   #
   # `playwright` is required lazily inside the methods that need it so that
   # loading peasant_path (the test suite, `list`, the web UI's boot) never
@@ -74,9 +74,13 @@ module PeasantPath
       Playwright.create(playwright_cli_executable_path: cli) { |playwright| yield playwright }
     end
 
-    # Launch options for Playwright's bundled Chromium.
+    # Launch options for Playwright's bundled Chromium. Under automation
+    # Chromium sets navigator.webdriver, which Cloudflare's page scripts (in
+    # front of both sites) read: on RoyalRoad the first page loads, then every
+    # later request gets an interactive Turnstile challenge, headless or not. Turning off the
+    # AutomationControlled blink feature leaves it false.
     def launch_options(headless:)
-      { headless: headless, channel: "chromium" }
+      { headless: headless, channel: "chromium", args: ["--disable-blink-features=AutomationControlled"] }
     end
 
     # New-headless Chromium announces itself as "HeadlessChrome/<ver>", which
