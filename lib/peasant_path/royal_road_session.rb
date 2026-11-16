@@ -1,20 +1,18 @@
 require "peasant_path/browser"
 
 module PeasantPath
-  # RoyalRoad sits behind Anubis, a proof-of-work interstitial that only a
-  # browser running its JavaScript gets past, and behind Cloudflare, which
-  # challenges browsers that look automated (see Browser.launch_options). A
-  # headless Chromium loads the site once to earn the pass cookie, then
-  # fetches every page from inside that tab so each request carries it. No
-  # login is involved, so the context is throwaway rather than a saved
-  # profile.
+  # RoyalRoad sits behind Cloudflare, whose interstitial only a browser
+  # running its JavaScript gets past, and which challenges browsers that look
+  # automated (see Browser.launch_options). A headless Chromium loads the site
+  # once to earn the pass cookie, then fetches every page from inside that tab
+  # so each request carries it. No login is involved, so the context is
+  # throwaway rather than a saved profile.
   module RoyalRoadSession
     HOME_URL = "https://www.royalroad.com/".freeze
-    # Anubis titles its interstitial "Making sure you're not a bot!"; the
-    # Cloudflare one in front of it says "Just a moment...". Matched as the
+    # Cloudflare titles its interstitial "Just a moment...". Matched as the
     # whole title so a chapter that happens to share the words is not taken
-    # for a challenge. Raw HTML spells the apostrophe as an entity.
-    CHALLENGE_TITLE = /\A\s*(?:Making sure you(?:'|&#39;)re not a bot!|Just a moment\.\.\.)\s*\z/i
+    # for a challenge.
+    CHALLENGE_TITLE = /\A\s*Just a moment\.\.\.\s*\z/i
     CHALLENGE_TIMEOUT_SECONDS = 60
 
     # In-page HTTP: [status, body] for an absolute or site-relative URL.

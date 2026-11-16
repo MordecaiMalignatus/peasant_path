@@ -92,6 +92,15 @@ module PeasantPath
       self
     end
 
+    # Library#rename writes the display name straight to disk, while a pull or
+    # rebuild can hold this Fic for minutes. Taking the stored name before
+    # persisting or building keeps them from writing back, or building under,
+    # a name that has since changed.
+    def reload_display_name!
+      @display_name = @repository.read_fic_info(@fic_id)["display_name"] if @repository.fic_info_exists?(@fic_id)
+      self
+    end
+
     def refresh_stats!
       loaded_chapters = chapters
       @stats = {

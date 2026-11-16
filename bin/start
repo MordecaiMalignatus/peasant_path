@@ -1,0 +1,197 @@
+#!/usr/bin/env bash
+# Takes a fresh clone to a running web UI: installs whatever is missing
+# (system packages, Ruby, Node, gems, the Playwright driver and Chromium),
+# then starts `peasant_path serve`. Every step checks before it installs, so
+# running it again on a set-up checkout goes straight to the server.
+set -euo pipefail
+
+usage() {
+  cat <<USAGE
+Usage: $0 [--setup-only] [serve options]
+
+Installs Peasant Path's dependencies where missing, then starts the web UI on
+http://127.0.0.1:4567. Options other than --setup-only are passed to
+'peasant_path serve', e.g. --port 8080 or --bind 0.0.0.0.
+
+  --setup-only   install dependencies, then exit instead of starting the server
+USAGE
+}
+
+setup_only=false
+serve_args=()
+while [[ $# -gt 0 ]]; do
+  case "$1" in
+    --setup-only) setup_only=true ;;
+    -h | --help)
+      usage
+      exit 0
+      ;;
+    *) serve_args+=("$1") ;;
+  esac
+  shift
+done
+
+repo_root="$(cd "$(dirname "$0")/.." && pwd)"
+cd "$repo_root"
+
+min_node_major=20
+
+step() { printf '\n==> %s\n' "$*"; }
+die() {
+  printf '\nError: %s\n' "$*" >&2
+  exit 1
+}
+have() { command -v "$1" >/dev/null 2>&1; }
+
+os="$(uname -s)"
+case "$os" in
+  Darwin | Linux) ;;
+  *) die "unsupported OS: $os (macOS and Linux are supported)" ;;
+esac
+
+# Debian and Ubuntu are the Linux systems this script can install packages on;
+# elsewhere it names what to install and carries on.
+apt_based=false
+if [[ "$os" == Linux ]] && have apt-get && have dpkg-query; then
+  apt_based=true
+fi
+
+apt_missing() {
+  local pkg
+  for pkg in "$@"; do
+    dpkg-query -W -f='${Status}' "$pkg" 2>/dev/null | grep -q 'install ok installed' || printf '%s\n' "$pkg"
+  done
+}
+
+apt_updated=false
+apt_install() {
+  if [[ "$apt_updated" == false ]]; then
+    sudo apt-get update
+    apt_updated=true
+  fi
+  sudo apt-get install -y "$@"
+}
+
+# The major version apt would install for nodejs, or nothing if it has none.
+apt_node_major() {
+  apt-cache policy nodejs 2>/dev/null | sed -n 's/^ *Candidate: *\([0-9]*\).*/\1/p' | head -n1
+}
+
+# --- System packages ----------------------------------------------------------
+# A compiler for the gems with native extensions (and for Ruby itself, when
+# mise has to build it), and ICU for the EPUB word counts.
+step "System packages"
+if [[ "$os" == Darwin ]]; then
+  xcode-select -p >/dev/null 2>&1 ||
+    die "the Xcode command line tools are needed to build gems. Run 'xcode-select --install', then run $0 again."
+  have brew || die "Homebrew is needed to install ICU: https://brew.sh"
+  # lib/peasant_path/word_counter.rb finds Homebrew's icu4c@78 on its own.
+  if [[ -d "$(brew --prefix)/opt/icu4c@78/lib" ]]; then
+    echo "icu4c@78 already installed"
+  else
+    brew install icu4c@78
+  fi
+else
+  packages=(build-essential pkg-config libicu-dev libssl-dev libyaml-dev libffi-dev zlib1g-dev)
+  # Without mise, the gems build against the system Ruby, which needs its
+  # headers and Bundler from separate packages.
+  have mise || packages+=(ruby-dev ruby-bundler)
+  if [[ "$apt_based" == true ]]; then
+    missing=()
+    while IFS= read -r pkg; do missing+=("$pkg"); done < <(apt_missing "${packages[@]}")
+    if ((${#missing[@]} > 0)); then
+      apt_install "${missing[@]}"
+    else
+      echo "all installed"
+    fi
+  else
+    echo "Not a Debian/Ubuntu system, so nothing is installed here. If a later step fails,"
+    echo "install your distribution's equivalents of: ${packages[*]}"
+  fi
+fi
+
+# --- Ruby and Node ------------------------------------------------------------
+# mise.toml pins both. With mise around, install those and put them on PATH;
+# otherwise use what the system has, installing Node only if apt offers a
+# version Playwright can run on.
+if have mise; then
+  step "Ruby and Node (via mise)"
+  mise trust --quiet "$repo_root/mise.toml"
+  mise install --quiet ruby node
+  eval "$(mise env --shell bash)"
+else
+  step "Ruby and Node"
+  if ! have node && [[ "$apt_based" == true ]]; then
+    candidate="$(apt_node_major)"
+    if [[ -n "$candidate" ]] && ((candidate >= min_node_major)); then
+      apt_install nodejs npm
+    else
+      die "apt only offers Node ${candidate:-(none)}, and Playwright needs $min_node_major or newer. Install mise (https://mise.jdx.dev) and run $0 again; it installs the Node version pinned in mise.toml."
+    fi
+  elif ! have node && [[ "$os" == Darwin ]]; then
+    brew install node
+  fi
+fi
+
+have ruby && ruby -e 'exit(Gem::Version.new(RUBY_VERSION) >= Gem::Version.new("3.2"))' ||
+  die "Ruby 3.2 or newer is needed. The easiest route is mise (https://mise.jdx.dev): install it and run $0 again; it installs the Ruby version pinned in mise.toml."
+have node && have npm ||
+  die "Node $min_node_major or newer is needed, with npm. Install mise (https://mise.jdx.dev) and run $0 again, or install Node from https://nodejs.org."
+node_major="$(node -p 'process.versions.node.split(".")[0]')"
+((node_major >= min_node_major)) ||
+  die "Node $(node --version) is too old; Playwright needs $min_node_major or newer. Install mise (https://mise.jdx.dev) and run $0 again, or install a current Node from https://nodejs.org."
+have bundle || die "Bundler is missing for $(ruby --version). Install it with 'gem install bundler', then run $0 again."
+printf 'Using %s\n' "$(ruby --version)"
+printf 'Using Node %s\n' "$(node --version)"
+
+# --- Gems ---------------------------------------------------------------------
+step "Gems"
+# A system Ruby's gem directory belongs to root; install into the checkout
+# instead of asking for sudo.
+if [[ ! -w "$(ruby -e 'print Gem.dir')" ]] && [[ -z "$(bundle config get path --parseable 2>/dev/null | cut -d= -f2-)" ]]; then
+  bundle config set --local path vendor/bundle
+fi
+if bundle check >/dev/null 2>&1; then
+  echo "all gems installed"
+else
+  bundle install
+fi
+
+# --- Playwright driver and Chromium -------------------------------------------
+# package.json pins the driver to the version the Ruby client speaks. Every
+# pull runs in this Chromium, since RoyalRoad and Patreon turn away plain HTTP
+# clients.
+step "Playwright and Chromium"
+wanted="$(node -p 'require("./package.json").dependencies["playwright-core"]')"
+installed="$(node -p 'require("./node_modules/playwright-core/package.json").version' 2>/dev/null || true)"
+if [[ "$installed" == "$wanted" ]]; then
+  echo "playwright-core $wanted already installed"
+else
+  npm ci --no-fund --no-audit
+fi
+# A no-op when this Chromium is already downloaded.
+node_modules/.bin/playwright-core install --no-shell chromium
+if [[ "$os" == Linux ]]; then
+  # The shared libraries Chromium needs, which a bare server lacks. The
+  # marker is written only once they installed, and lives in node_modules so
+  # a new driver version checks again.
+  deps_marker="node_modules/.peasant_path-chromium-deps"
+  if [[ ! -f "$deps_marker" ]]; then
+    if [[ "$apt_based" == true ]]; then
+      sudo node_modules/.bin/playwright-core install-deps chromium
+      touch "$deps_marker"
+    else
+      echo "Chromium needs system libraries; see https://playwright.dev/docs/browsers#install-system-dependencies"
+    fi
+  fi
+fi
+
+if [[ "$setup_only" == true ]]; then
+  step "Setup complete"
+  echo "Start the web UI with: $0"
+  exit 0
+fi
+
+# --- Web UI -------------------------------------------------------------------
+step "Starting the web UI (Ctrl-C to stop)"
+exec bundle exec bin/peasant_path serve ${serve_args[@]+"${serve_args[@]}"}

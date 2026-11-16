@@ -18,15 +18,34 @@ RSpec.describe PeasantPath::Web do
   let(:library) { PeasantPath::Library.new(repo: repo, royalroad_session: rr_session, royalroad_client_for: ->(_transport) { mock_rr }) }
   let(:fic_id) { "107917" }
 
-  # Records that a background job was requested without spawning a thread or
-  # touching the network, so route behaviour can be asserted deterministically.
+  # Records that a background job was requested, keeping its block, without
+  # spawning a thread or touching the network, so route behaviour can be
+  # asserted deterministically and a test can run the job itself.
   let(:jobs) do
     Class.new do
-      attr_reader :runs
+      attr_reader :runs, :enqueued, :blocks
+      attr_accessor :busy
 
-      def initialize = @runs = 0
-      def busy? = false
-      def run = (@runs += 1) && true
+      def initialize
+        @runs = 0
+        @enqueued = 0
+        @blocks = []
+        @busy = false
+      end
+
+      def busy? = @busy
+
+      def run(&block)
+        @blocks << block
+        @runs += 1
+        true
+      end
+
+      def enqueue(&block)
+        @blocks << block
+        @enqueued += 1
+        !@busy
+      end
     end.new
   end
 
@@ -193,17 +212,40 @@ RSpec.describe PeasantPath::Web do
       post "/follow", url: "https://www.royalroad.com/fiction/107917/sky-pride"
       expect(last_response.status).to eq 302
       expect(library.config.followed_stories).to include(fic_id)
-      expect(jobs.runs).to eq 1
+      expect(jobs.enqueued).to eq 1
+
+      follow_redirect!
+      expect(last_response.body).to include("Downloading and building")
+    end
+
+    it "pulls and builds the new story when the queued job runs" do
+      allow(library).to receive(:pull_fic).and_return([])
+      allow(library).to receive(:rebuild)
+      post "/follow", url: "https://www.royalroad.com/fiction/107917/sky-pride"
+
+      jobs.blocks.last.call
+
+      expect(library).to have_received(:pull_fic).with(having_attributes(fic_id: fic_id))
+      expect(library).to have_received(:rebuild).with(having_attributes(fic_id: fic_id))
     end
 
     it "follows a Patreon collection and queues its first pull" do
       post "/follow", url: "https://www.patreon.com/collection/1522125?view=expanded"
       expect(last_response.status).to eq 302
       expect(library.config.followed_stories).to include("patreon-col-1522125")
-      expect(jobs.runs).to eq 1
+      expect(jobs.enqueued).to eq 1
 
       follow_redirect!
       expect(last_response.body).to include("Now following")
+    end
+
+    it "queues the first pull behind a running job and says so" do
+      jobs.busy = true
+      post "/follow", url: "https://www.royalroad.com/fiction/107917/sky-pride"
+      expect(jobs.enqueued).to eq 1
+
+      follow_redirect!
+      expect(last_response.body).to include("once the current job finishes")
     end
 
     it "rejects a non-RoyalRoad URL with a flash and no job" do
@@ -238,13 +280,33 @@ RSpec.describe PeasantPath::Web do
 
       expect(last_response.status).to eq 302
       expect(repo.read_fic_info(fic_id)["display_name"]).to eq "Better Title"
-      expect(jobs.runs).to eq 1
+      expect(jobs.enqueued).to eq 1
+    end
+
+    it "rebuilds under the new name when the queued job runs" do
+      follow_fic
+      allow(library).to receive(:rebuild)
+      post "/rename", fic_id: fic_id, name: "Better Title"
+
+      jobs.blocks.last.call
+
+      expect(library).to have_received(:rebuild).with(having_attributes(fic_id: fic_id, display_title: "Better Title"))
+    end
+
+    it "queues the rebuild behind a running job and says so" do
+      follow_fic
+      jobs.busy = true
+      post "/rename", fic_id: fic_id, name: "Better Title"
+      expect(jobs.enqueued).to eq 1
+
+      follow_redirect!
+      expect(last_response.body).to include("Rebuild will run once the current job finishes")
     end
 
     it "404s for a story that is not followed" do
       post "/rename", fic_id: "999999", name: "Nope"
       expect(last_response.status).to eq 404
-      expect(jobs.runs).to eq 0
+      expect(jobs.enqueued).to eq 0
     end
   end
 

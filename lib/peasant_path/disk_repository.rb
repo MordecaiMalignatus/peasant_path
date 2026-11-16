@@ -73,6 +73,10 @@ module PeasantPath
       File.read(volume_cover_image_path(fic_id, volume_id))
     end
 
+    def fic_info_exists?(fic_id)
+      File.exist?(File.join(fic_dir(fic_id), "fic_info.json"))
+    end
+
     def read_fic_info(fic_id)
       JSON.parse(File.read(File.join(fic_dir(fic_id), "fic_info.json")))
     end

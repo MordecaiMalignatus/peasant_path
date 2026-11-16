@@ -200,7 +200,7 @@ module PeasantPath
       chapters = fic.chapters
 
       fic.apply_fic_info(client.fic_info(fic))
-      fic.persist_fic_info
+      fic.reload_display_name!.persist_fic_info
       yield :started, fic if block_given?
 
       chapter_toc = client.chapter_overview(fic, known_ids: chapters.map(&:chapter_id))
@@ -212,7 +212,7 @@ module PeasantPath
         saved
       end
       chapters.concat(new_chapters)
-      fic.refresh_stats!
+      fic.reload_display_name!.refresh_stats!
       new_chapters
     end
 
@@ -265,7 +265,7 @@ module PeasantPath
     # Rebuild the combined and per-volume EPUBs for a fic into the repo's build
     # directory. Assumes the fic's chapters are already on disk (no pull).
     def rebuild(fic)
-      fic.refresh_stats!
+      fic.reload_display_name!.refresh_stats!
       fic.book.build_all(@repo.build_dir(fic.fic_id))
       @logger.info("rebuilt #{fic.display_title}")
     end

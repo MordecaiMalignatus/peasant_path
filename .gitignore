@@ -1,3 +1,5 @@
 /peasant_path-*.gem
 .playwright-mcp/
 node_modules/
+.bundle/
+vendor/bundle/

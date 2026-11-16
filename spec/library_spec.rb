@@ -96,6 +96,22 @@ RSpec.describe PeasantPath::Library do
       expect(results.first[:new_chapters].map(&:chapter_id)).to contain_exactly("2113501", "2113560")
     end
 
+    it "keeps a rename made while the pull runs, and rebuilds under it" do
+      renamed = false
+      allow(mock_rr).to receive(:enrich_overview_chapter!) do |chapter|
+        library.rename(fic_id, "Renamed") unless renamed
+        renamed = true
+        chapter.chapter_text = "<p>text</p>"
+        chapter.chapter_title = "Title #{chapter.chapter_id}"
+        chapter
+      end
+
+      library.refresh
+
+      expect(repo.read_fic_info(fic_id)["display_name"]).to eq "Renamed"
+      expect(File).to exist(repo.epub_path(fic_id, "Renamed.epub"))
+    end
+
     it "appends a pull-log entry" do
       library.pull_all
       log = repo.read_pull_log
@@ -175,6 +191,7 @@ RSpec.describe PeasantPath::Library do
       unchanged = instance_double(PeasantPath::Fic, fic_id: "2")
       changed_book = instance_double(PeasantPath::Epub)
       allow(changed).to receive(:book).and_return(changed_book)
+      allow(changed).to receive(:reload_display_name!).and_return(changed)
       allow(changed).to receive(:refresh_stats!)
       allow(changed_book).to receive(:build_all)
       allow(unchanged).to receive(:book)

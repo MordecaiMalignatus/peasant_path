@@ -3,16 +3,12 @@ require "peasant_path/royal_road_session"
 require "playwright"
 
 RSpec.describe PeasantPath::RoyalRoadSession do
-  let(:challenge_html) { "<html><head><title>Making sure you&#39;re not a bot!</title></head><body></body></html>" }
+  let(:challenge_html) { "<html><head><title>Just a moment...</title></head><body></body></html>" }
   let(:fic_html) { "<html><head><title>Sky Pride | Royal Road</title></head><body>window.chapters = [];</body></html>" }
 
   describe ".challenge?" do
-    it "recognises the Anubis interstitial" do
-      expect(described_class.challenge?(challenge_html)).to be true
-    end
-
     it "recognises the Cloudflare interstitial" do
-      expect(described_class.challenge?("<title>Just a moment...</title>")).to be true
+      expect(described_class.challenge?(challenge_html)).to be true
     end
 
     it "passes a regular page" do
@@ -21,7 +17,7 @@ RSpec.describe PeasantPath::RoyalRoadSession do
 
     it "passes a chapter whose title merely contains the challenge's words" do
       expect(described_class.challenge?("<title>Just a Moment - Sky Pride | Royal Road</title>")).to be false
-      expect(described_class.challenge?("<title>I am not a bot! - Sky Pride | Royal Road</title>")).to be false
+      expect(described_class.challenge?("<title>Just a moment... - Sky Pride | Royal Road</title>")).to be false
     end
 
     it "passes a body with no title" do
@@ -32,7 +28,7 @@ RSpec.describe PeasantPath::RoyalRoadSession do
   describe ".pass_challenge" do
     it "waits until the page title is no longer the challenge" do
       page = double("page", goto: nil, wait_for_load_state: nil)
-      allow(page).to receive(:title).and_return("Making sure you're not a bot!", "Sky Pride | Royal Road")
+      allow(page).to receive(:title).and_return("Just a moment...", "Sky Pride | Royal Road")
       allow(described_class).to receive(:sleep)
 
       described_class.pass_challenge(page, "https://www.royalroad.com/")
@@ -53,12 +49,12 @@ RSpec.describe PeasantPath::RoyalRoadSession do
     end
 
     it "gives up with a ScrapeError once the timeout passes" do
-      page = double("page", goto: nil, title: "Making sure you're not a bot!")
+      page = double("page", goto: nil, title: "Just a moment...")
       allow(described_class).to receive(:sleep)
 
       expect {
         described_class.pass_challenge(page, "https://www.royalroad.com/", timeout: -1)
-      }.to raise_error(PeasantPath::RoyalRoadClient::ScrapeError, /bot check.*not a bot/)
+      }.to raise_error(PeasantPath::RoyalRoadClient::ScrapeError, /bot check.*Just a moment/)
     end
   end
 

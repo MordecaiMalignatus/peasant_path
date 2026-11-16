@@ -14,13 +14,35 @@ directory, so anything you do in one shows up in the other.
 ## Getting started
 
 ```sh
-bin/install_system_dependencies   # ICU, plus the browser that pulls run in (needs npm, see below)
-bundle install
-bundle exec bin/peasant_path serve   # then open http://127.0.0.1:4567
+git clone https://github.com/MordecaiMalignatus/peasant_path.git
+cd peasant_path
+bin/start                         # then open http://127.0.0.1:4567
 ```
 
-The rest of this README writes the command as `peasant_path`, as it is called
-once the gem is installed.
+`bin/start` installs whatever is missing, then starts the web UI:
+
+- **System packages:** ICU and a compiler for the gems. On macOS that is
+  Homebrew's `icu4c@78` plus the Xcode command line tools; on Debian/Ubuntu,
+  the apt packages that are missing.
+- **Ruby and Node**, at the versions pinned in `mise.toml`, if
+  [mise](https://mise.jdx.dev) is installed. Without mise, it uses the
+  system's Ruby (3.2 or newer) and Node (20 or newer), installing Node from
+  Homebrew or apt if needed. Most Debian and Ubuntu releases ship a Node
+  that is too old, so mise is the easier route there.
+- **Gems**, through Bundler. With a system Ruby whose gem directory belongs
+  to root, they go into `vendor/bundle` instead.
+- **The Playwright driver and Chromium** that every pull runs in (see
+  [Browser](#browser)), plus Chromium's system libraries on Debian/Ubuntu.
+
+Each step checks first, so running `bin/start` again later goes straight to
+the server. Options are passed on to `serve`, e.g. `bin/start --port 8080`;
+`bin/start --setup-only` installs without starting anything. On Linux, the
+apt installs ask for `sudo`.
+
+The rest of this README writes the command as `peasant_path`. From a checkout,
+that is `bundle exec bin/peasant_path`. If mise is installed but not
+[activated](https://mise.jdx.dev/getting-started.html#activate-mise) in your
+shell, prefix commands with `mise exec --` so they get the pinned Ruby and Node.
 
 Paste a RoyalRoad fiction URL (e.g. `https://www.royalroad.com/fiction/107917/sky-pride`)
 or a Patreon collection or creator URL into the form and hit **Follow**.
@@ -124,8 +146,8 @@ peasant_path browser install      # one-off: npm-installs the driver and Chromiu
 
 `browser install` needs `npm` on the PATH and puts everything under
 `~/.config/peasant_path/patreon/driver/`, so it works for an installed gem as
-well as a checkout. (From a checkout, `bin/install_system_dependencies` does
-the same into `./node_modules`, which the driver lookup also checks.) On Linux,
+well as a checkout. (From a checkout, `bin/start` does the same into
+`./node_modules`, which the driver lookup also checks.) On Linux,
 Chromium additionally needs system libraries: `sudo <driver>/node_modules/.bin/playwright-core install-deps chromium`.
 `PEASANT_PATH_PLAYWRIGHT_CLI` overrides the lookup with an explicit
 `playwright-core` path.
@@ -196,13 +218,11 @@ RoyalRoad's rate limiting; use it for unattended/bulk runs.
 ## Development
 
 ```sh
-bin/install_system_dependencies
-bundle install
+bin/start --setup-only # dependencies, as in Getting started
 bundle exec rspec      # tests
 bundle exec rufo .     # formatting
 ```
 
 `ffi-icu` provides Unicode word-boundary analysis for EPUB word-count estimates.
-On Ubuntu this requires `libicu-dev`; on macOS the install script uses Homebrew's
-`icu4c@78` formula and prints the environment variables needed for the current
-shell.
+On Ubuntu this requires `libicu-dev`; on macOS it uses Homebrew's `icu4c@78`
+formula, which the app finds on its own.

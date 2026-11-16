@@ -123,14 +123,18 @@ module PeasantPath
         result = library.follow(url, name: name)
         if result[:followed]
           fic = result[:fic]
-          settings.jobs.run do
+          started = settings.jobs.enqueue do
             new_chapters = library.pull_fic(fic)
             app_logger.info("#{fic.display_title}: #{new_chapters.size} new chapter(s)")
             library.rebuild(fic)
           end
           # The title isn't fetched until the background pull runs, so fall back
           # to the user-supplied name (or a generic phrase) for the flash.
-          flash! "Now following #{fic.display_title || "the story"}. Downloading and building…"
+          following = "Now following #{fic.display_title || "the story"}."
+          flash!(
+            started ? "#{following} Downloading and building…" :
+              "#{following} It will be downloaded and built once the current job finishes.",
+          )
         else
           flash! "Already following that story."
         end
@@ -152,7 +156,10 @@ module PeasantPath
       halt 404, "Unknown story" unless followed?(fic_id)
 
       fic = library.rename(fic_id, params[:name])
-      started = settings.jobs.run { library.rebuild(fic) }
+      # A pull that runs before the rebuild can change the story's volumes and
+      # chapters on disk, so the rebuild reads it afresh rather than reusing
+      # this copy.
+      started = settings.jobs.enqueue { library.rebuild(Fic.from_disk(fic_id, library.repo)) }
       flash!(
         started ? "Renamed to #{fic.display_title}. Rebuilding…" :
           "Renamed to #{fic.display_title}. Rebuild will run once the current job finishes.",
