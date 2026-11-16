@@ -1,63 +1,49 @@
 # Peasant Path - Because EPubs are nice.
 
-This is a small incremental scraper for RoyalRoad fics and Patreon
-collections or creator feeds. It follows stories and
-persists any new chapters to disk. It then can also assemble EPUBs based on
-these scraped chapters.
+Peasant Path is a small localhost web app that follows RoyalRoad fics and
+Patreon collections or creator feeds, pulls new chapters on a schedule, and
+turns them into EPUBs you can download: one for the whole story, plus one per
+volume where the story has them.
+
+![The Peasant Path web interface](docs/web-ui.png)
 
 State lives under `~/.config/peasant_path` (followed stories, scraped chapters,
-covers, built EPUBs, and a pull log). The CLI and the web interface share that
-same directory, so anything you do in one shows up in the other.
+covers, built EPUBs, and a pull log). The web UI and the CLI share that
+directory, so anything you do in one shows up in the other.
 
-## Browser
-
-Neither site answers a plain HTTP client: RoyalRoad sits behind an Anubis
-proof-of-work check and Cloudflare; Patreon behind Cloudflare's browser
-fingerprinting.
-Every pull therefore runs in a headless Chromium driven by Playwright, which
-needs Node:
+## Getting started
 
 ```sh
-peasant_path browser install      # one-off: npm-installs the driver and Chromium under ~/.config/peasant_path
+bin/install_system_dependencies   # ICU, plus the browser that pulls run in (needs npm, see below)
+bundle install
+bundle exec bin/peasant_path serve   # then open http://127.0.0.1:4567
 ```
 
-`browser install` needs `npm` on the PATH and puts everything under
-`~/.config/peasant_path/patreon/driver/`, so it works for an installed gem as
-well as a checkout. (From a checkout, `bin/install_system_dependencies` does
-the same into `./node_modules`, which the driver lookup also checks.) On Linux,
-Chromium additionally needs system libraries: `sudo <driver>/node_modules/.bin/playwright-core install-deps chromium`.
-`PEASANT_PATH_PLAYWRIGHT_CLI` overrides the lookup with an explicit
-`playwright-core` path. The container image ships with both already installed.
+The rest of this README writes the command as `peasant_path`, as it is called
+once the gem is installed.
 
-## CLI
-
-```sh
-# Follow one or more stories
-peasant_path add https://www.royalroad.com/fiction/107917/sky-pride
-peasant_path add -n "My Name" https://www.royalroad.com/fiction/12345/...
-
-# Pull new chapters for every followed story
-peasant_path pull [--throttle]
-
-# Pull new chapters AND rebuild the EPUBs of stories that changed
-peasant_path refresh [--throttle]
-
-# Show what's new over a recent window (default 48h)
-peasant_path report [--hours N]
-
-# Build EPUB(s) to the current directory (interactive fzf selector if no IDs)
-peasant_path build [FIC_ID...]
-```
-
-`--throttle` adds a 5–15s random delay between chapter downloads to stay under
-RoyalRoad's rate limiting; use it for unattended/bulk runs.
+Paste a RoyalRoad fiction URL (e.g. `https://www.royalroad.com/fiction/107917/sky-pride`)
+or a Patreon collection or creator URL into the form and hit **Follow**.
+Following a story starts a background pull and build, so its download link
+shows up shortly after. Patreon additionally needs a [login](#patreon).
 
 ## Web interface
 
-A Sinatra app over the same state. It serves an index of followed stories with
-download links, a form to follow new stories, and a "pull now" button. Following
-a story kicks off a background pull + build, so a download link appears shortly
-after.
+The index lists every followed story with its author, source, chapter and word
+counts, and the outcome of its last pull, including any error. From there you
+can:
+
+- **Pull now:** fetch new chapters for every story and rebuild the EPUBs of
+  the ones that changed. Scheduled pulls do the same (see
+  [Automatic pulling](#automatic-pulling)).
+- **Follow** a new story, optionally with a display name of your own.
+- **Download** the complete EPUB or a single volume.
+- **Rename** a story, which rebuilds its EPUBs under the new title.
+- **Unfollow** a story. Its downloaded chapters and EPUBs stay on disk.
+- **Rebuild all EPUBs** from the chapters on disk, without pulling.
+
+Only one job runs at a time; while a pull or build is running, **Pull now**,
+**Rename** and **Rebuild all EPUBs** are disabled.
 
 ```sh
 peasant_path serve [--port 4567] [--bind 127.0.0.1]
@@ -65,15 +51,16 @@ peasant_path serve [--port 4567] [--bind 127.0.0.1]
 bundle exec rackup config.ru
 ```
 
-From a checkout, the web UI can also run in a Podman container while using the
-same local state directory as the non-container app:
+From a checkout, the web UI can also run in a Podman container that uses the
+same local state directory:
 
 ```sh
 bin/run_container --build
 ```
 
 This mounts `~/.config/peasant_path` into the container, so followed stories,
-chapters, covers, pull logs, and built EPUBs are shared with local CLI runs.
+chapters, covers, pull logs, and built EPUBs are shared with local runs. The
+image ships with the browser already installed.
 
 > **Exposure caveat.** The app has no authentication and no Host-header check,
 > and it mutates state (triggers scrapes, writes files). That's fine bound to
@@ -89,16 +76,22 @@ chapters, covers, pull logs, and built EPUBs are shared with local CLI runs.
 
 ### Automatic pulling
 
-The server pulls and rebuilds changed stories on a schedule. A single `install`
-command detects the host OS and sets up the right scheduler, always falling back
-to in-process scheduling when no external one is available.
+By default `serve` pulls every story and rebuilds the changed ones on its own:
+15 minutes after it starts, then every 6 hours. Scheduled pulls and the
+**Pull now** button wait 5–15s between chapter downloads to stay under
+RoyalRoad's rate limiting. Set the cadence with `PEASANT_PATH_INTERVAL_HOURS`,
+and override the behaviour with `PEASANT_PATH_SCHEDULER`: `off`, `internal`
+(always run the loop) or `external` (never run it; something else pulls).
+
+To keep the web UI running across logins and reboots, or to pull without it,
+hand the job to the OS. `install` detects the host's scheduler:
 
 ```sh
 peasant_path install [--interval HOURS] [--port N] [--bind ADDR]
 ```
 
-**systemd (Linux, preferred).** Installs `--user` units: a web service kept
-alive by `Restart=always`, plus a timer that runs `refresh` periodically.
+**systemd (Linux).** Installs `--user` units: a web service kept alive by
+`Restart=always`, plus a timer that runs `refresh --throttle` periodically.
 
 ```sh
 systemctl --user daemon-reload
@@ -109,16 +102,35 @@ loginctl enable-linger "$USER"   # keep user units running without an active log
 When the timer is active, the web process detects it and does **not** also
 schedule pulls in-process.
 
-**launchd (macOS).** Installs a launchd job that runs `refresh` (pull + rebuild)
-on an interval, then prints the `launchctl load` command. This schedules the
-pull only; run `serve` separately if you also want the web UI. `--port`/`--bind`
-apply to the systemd web service and are ignored here.
+**launchd (macOS).** Installs a launchd job that runs `refresh --throttle` on
+an interval, then prints the `launchctl load` command. It schedules the pull
+only, not the web UI, and `--port`/`--bind` are ignored. `serve` cannot see
+this job, so if you run both, start the server with
+`PEASANT_PATH_SCHEDULER=external` to avoid pulling twice.
 
-**In-process fallback.** When no external scheduler is installed (or the host
-supports neither systemd nor launchd), `serve` runs an in-process loop on the
-same interval. Override behaviour with `PEASANT_PATH_SCHEDULER` (`off` /
-`internal` / `external`) and the cadence with `PEASANT_PATH_INTERVAL_HOURS`
-(default 6).
+On any other host `install` only explains that `serve`'s own loop is the
+scheduler.
+
+## Browser
+
+Neither site answers a plain HTTP client: RoyalRoad and Patreon both sit behind
+Cloudflare, which turns away anything that does not run its JavaScript
+challenge in a real browser. Every pull therefore runs in a headless Chromium
+driven by Playwright, which needs Node:
+
+```sh
+peasant_path browser install      # one-off: npm-installs the driver and Chromium under ~/.config/peasant_path
+```
+
+`browser install` needs `npm` on the PATH and puts everything under
+`~/.config/peasant_path/patreon/driver/`, so it works for an installed gem as
+well as a checkout. (From a checkout, `bin/install_system_dependencies` does
+the same into `./node_modules`, which the driver lookup also checks.) On Linux,
+Chromium additionally needs system libraries: `sudo <driver>/node_modules/.bin/playwright-core install-deps chromium`.
+`PEASANT_PATH_PLAYWRIGHT_CLI` overrides the lookup with an explicit
+`playwright-core` path.
+
+Covers are downloaded straight from RoyalRoad's CDN, which has no bot check.
 
 ## Patreon
 
@@ -131,9 +143,13 @@ peasant_path patreon status       # who the saved session belongs to
 peasant_path patreon logout       # forget the saved browser profile
 ```
 
+The login is kept in a browser profile under `~/.config/peasant_path/patreon/`
+and reused headlessly by every pull. A Patreon session lasts about a year;
+`patreon status` tells you when it has expired, and a failed pull says so on
+the story's line in the web UI and in the pull log.
+
 ### Moving the login to another machine
 
-The login lives in a browser profile under `~/.config/peasant_path/patreon/`.
 Three ways to get a logged-in session onto a fresh machine:
 
 1. **It has a display:** run `peasant_path patreon login` there.
@@ -142,17 +158,40 @@ Three ways to get a logged-in session onto a fresh machine:
    `patreon-session.json`, copy that file over, then run
    `peasant_path patreon import patreon-session.json` on the target. The file
    holds your session cookie, so treat it like a password and delete it
-   after importing.
+   after importing. The container has no display to log in from, so this is
+   the way in there too.
 3. **Cloning the whole state:** copying `~/.config/peasant_path` carries the
    profile along; Playwright's Chromium stores its cookies without tying them
    to the machine's keychain, so the login survives the move.
 
-A Patreon session lasts about a year; `patreon status` tells you when it has
-expired, and a failed pull says so in the pull log.
+## CLI
 
-The login is kept in a browser profile under `~/.config/peasant_path/patreon/`
-and reused headlessly by every pull. The container has no display to log in
-from, so a login there has to come through `patreon import`.
+Everything the web UI does is also available from the command line, which is
+handy for scripting and for building EPUBs into a directory of your choice:
+
+```sh
+# Follow one or more stories
+peasant_path add https://www.royalroad.com/fiction/107917/sky-pride
+peasant_path add -n "My Name" https://www.royalroad.com/fiction/12345/...
+
+# Stop following a story (downloaded files stay on disk)
+peasant_path unfollow FIC_ID
+
+# Pull new chapters for every followed story
+peasant_path pull [--throttle]
+
+# Pull new chapters AND rebuild the EPUBs of stories that changed
+peasant_path refresh [--throttle]
+
+# Show what's new over a recent window (default 48h)
+peasant_path report [--hours N]
+
+# Pull and build EPUB(s) into the current directory (interactive fzf selector if no IDs)
+peasant_path build [FIC_ID...]
+```
+
+`--throttle` adds a 5–15s random delay between chapter downloads to stay under
+RoyalRoad's rate limiting; use it for unattended/bulk runs.
 
 ## Development
 
