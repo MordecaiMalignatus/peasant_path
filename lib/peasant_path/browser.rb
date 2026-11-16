@@ -53,7 +53,9 @@ module PeasantPath
       runner.call([cli, "install", "--no-shell", "chromium"])
       if RUBY_PLATFORM.include?("linux")
         io.puts "Chromium needs system libraries on Linux; if pulls fail to launch a browser run:"
-        io.puts "  sudo #{cli} install-deps chromium"
+        # sudo resets PATH, so name the Node to run the driver with rather
+        # than relying on its `env node` shebang.
+        io.puts "  sudo \"$(command -v node)\" #{File.join(driver_dir, "node_modules", "playwright-core", "cli.js")} install-deps chromium"
       end
       cli
     end

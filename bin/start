@@ -63,13 +63,29 @@ apt_missing() {
   done
 }
 
+# Root needs no sudo, and a bare root shell (a fresh container, a server set
+# up with only a root password) often has none.
+as_root() {
+  if [[ $EUID -eq 0 ]]; then
+    "$@"
+  elif have sudo; then
+    sudo "$@"
+  else
+    die "installing system packages needs root: install sudo, or run $0 as root"
+  fi
+}
+
 apt_updated=false
-apt_install() {
+apt_update() {
   if [[ "$apt_updated" == false ]]; then
-    sudo apt-get update
+    as_root apt-get update
     apt_updated=true
   fi
-  sudo apt-get install -y "$@"
+}
+
+apt_install() {
+  apt_update
+  as_root apt-get install -y "$@"
 }
 
 # The major version apt would install for nodejs, or nothing if it has none.
@@ -93,9 +109,12 @@ if [[ "$os" == Darwin ]]; then
   fi
 else
   packages=(build-essential pkg-config libicu-dev libssl-dev libyaml-dev libffi-dev zlib1g-dev)
-  # Without mise, the gems build against the system Ruby, which needs its
-  # headers and Bundler from separate packages.
-  have mise || packages+=(ruby-dev ruby-bundler)
+  # Without mise and without a Ruby of the user's own (rbenv, asdf, ...), the
+  # gems build against the system Ruby, which needs its headers and Bundler
+  # from separate packages.
+  if ! have mise && { ! have ruby || [[ "$(command -v ruby)" == /usr/bin/ruby ]]; }; then
+    packages+=(ruby-dev ruby-bundler)
+  fi
   if [[ "$apt_based" == true ]]; then
     missing=()
     while IFS= read -r pkg; do missing+=("$pkg"); done < <(apt_missing "${packages[@]}")
@@ -117,18 +136,26 @@ fi
 if have mise; then
   step "Ruby and Node (via mise)"
   mise trust --quiet "$repo_root/mise.toml"
-  mise install --quiet ruby node
+  # `mise install` asks the network for version lists even when everything
+  # is installed, so only run it when something is missing.
+  if [[ -n "$(mise ls --current --missing ruby node)" ]]; then
+    mise install --quiet ruby node
+  fi
   eval "$(mise env --shell bash)"
 else
   step "Ruby and Node"
-  if ! have node && [[ "$apt_based" == true ]]; then
+  if [[ "$apt_based" == true ]] && ! have node; then
+    # A stale or emptied package list would report no Node, or an old one.
+    apt_update
     candidate="$(apt_node_major)"
     if [[ -n "$candidate" ]] && ((candidate >= min_node_major)); then
       apt_install nodejs npm
     else
       die "apt only offers Node ${candidate:-(none)}, and Playwright needs $min_node_major or newer. Install mise (https://mise.jdx.dev) and run $0 again; it installs the Node version pinned in mise.toml."
     fi
-  elif ! have node && [[ "$os" == Darwin ]]; then
+  elif [[ "$apt_based" == true ]] && ! have npm; then
+    apt_install npm
+  elif [[ "$os" == Darwin ]] && ! have node; then
     brew install node
   fi
 fi
@@ -178,7 +205,9 @@ if [[ "$os" == Linux ]]; then
   deps_marker="node_modules/.peasant_path-chromium-deps"
   if [[ ! -f "$deps_marker" ]]; then
     if [[ "$apt_based" == true ]]; then
-      sudo node_modules/.bin/playwright-core install-deps chromium
+      # sudo resets PATH, which would hide a Node from mise from the
+      # driver's `env node` shebang, so hand it the Node in use here.
+      as_root "$(command -v node)" node_modules/playwright-core/cli.js install-deps chromium
       touch "$deps_marker"
     else
       echo "Chromium needs system libraries; see https://playwright.dev/docs/browsers#install-system-dependencies"

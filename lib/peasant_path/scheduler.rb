@@ -1,4 +1,5 @@
 require "rbconfig"
+require "cgi"
 
 module PeasantPath
   # Decides how the auto-pull happens and, in the in-process fallback case, runs
@@ -38,7 +39,12 @@ module PeasantPath
       RbConfig::CONFIG["host_os"].include?("darwin")
     end
 
-    def self.launchd_plist(ruby_path:, script_path:, interval_seconds:, log_dir:)
+    # path is the PATH the job runs with. launchd and systemd start jobs with
+    # a bare system PATH, and the browser driver finds Node through PATH, so
+    # the installing shell's PATH (with a Node from mise, nvm or Homebrew) is
+    # written into the job.
+    def self.launchd_plist(ruby_path:, script_path:, interval_seconds:, log_dir:, path:)
+      x = ->(text) { CGI.escapeHTML(text.to_s) }
       <<~XML
         <?xml version="1.0" encoding="UTF-8"?>
         <!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
@@ -48,19 +54,24 @@ module PeasantPath
           <string>com.peasant_path.pull</string>
           <key>ProgramArguments</key>
           <array>
-            <string>#{ruby_path}</string>
-            <string>#{script_path}</string>
+            <string>#{x.(ruby_path)}</string>
+            <string>#{x.(script_path)}</string>
             <string>refresh</string>
             <string>--throttle</string>
           </array>
+          <key>EnvironmentVariables</key>
+          <dict>
+            <key>PATH</key>
+            <string>#{x.(path)}</string>
+          </dict>
           <key>StartInterval</key>
           <integer>#{interval_seconds}</integer>
           <key>RunAtLoad</key>
           <false/>
           <key>StandardOutPath</key>
-          <string>#{log_dir}/peasant_path.log</string>
+          <string>#{x.("#{log_dir}/peasant_path.log")}</string>
           <key>StandardErrorPath</key>
-          <string>#{log_dir}/peasant_path.error.log</string>
+          <string>#{x.("#{log_dir}/peasant_path.error.log")}</string>
         </dict>
         </plist>
       XML
@@ -78,8 +89,23 @@ module PeasantPath
       File.directory?("/run/systemd/system")
     end
 
+    # One word of an ExecStart= or Environment= line, quoted so spaces survive.
+    # Inside quotes systemd reads backslash escapes, and it expands %
+    # specifiers everywhere, so both are escaped.
+    def self.systemd_quote(word)
+      escaped = word.to_s.gsub("\\") { "\\\\" }.gsub('"') { '\\"' }.gsub("%") { "%%" }
+      %("#{escaped}")
+    end
+
+    # An ExecStart= command line from its words.
+    def self.systemd_command(*words)
+      words.map { |word| systemd_quote(word) }.join(" ")
+    end
+
     # Pure generator for the three --user units. Returns { filename => content }.
-    def self.systemd_units(exec_serve:, exec_pull:, interval_hours: DEFAULT_INTERVAL_HOURS)
+    # path is the PATH both services run with, as for launchd_plist.
+    def self.systemd_units(exec_serve:, exec_pull:, path:, interval_hours: DEFAULT_INTERVAL_HOURS)
+      environment = "Environment=#{systemd_quote("PATH=#{path}")}"
       {
         "peasant-path-web.service" => <<~UNIT,
           [Unit]
@@ -87,6 +113,7 @@ module PeasantPath
           After=network.target
 
           [Service]
+          #{environment}
           ExecStart=#{exec_serve}
           Restart=always
 
@@ -99,6 +126,7 @@ module PeasantPath
 
           [Service]
           Type=oneshot
+          #{environment}
           ExecStart=#{exec_pull}
         UNIT
         "peasant-path-pull.timer" => <<~UNIT,

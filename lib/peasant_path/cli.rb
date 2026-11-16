@@ -244,8 +244,9 @@ module PeasantPath
       unit_dir = File.expand_path("~/.config/systemd/user")
 
       units = Scheduler.systemd_units(
-        exec_serve: "#{ruby_path} #{script_path} serve --bind #{options[:bind]} --port #{options[:port]}",
-        exec_pull: "#{ruby_path} #{script_path} refresh --throttle",
+        exec_serve: Scheduler.systemd_command(ruby_path, script_path, "serve", "--bind", options[:bind], "--port", options[:port]),
+        exec_pull: Scheduler.systemd_command(ruby_path, script_path, "refresh", "--throttle"),
+        path: ENV.fetch("PATH", ""),
         interval_hours: options[:interval],
       )
 
@@ -274,6 +275,7 @@ module PeasantPath
         script_path: script_path,
         interval_seconds: (interval_hours * 3600).to_i,
         log_dir: log_dir,
+        path: ENV.fetch("PATH", ""),
       )
 
       FileUtils.mkdir_p(File.dirname(plist_path))

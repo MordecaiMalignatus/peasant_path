@@ -185,6 +185,116 @@ RSpec.describe PeasantPath::Library do
     end
   end
 
+  # Ahead of a book release, Royal Road authors "stub" a story: they take
+  # its first chapters off the site, often leaving a teaser chapter pointing
+  # at the book where they were, while new chapters keep coming. Royal Road
+  # then renumbers its chapter list from the first chapter still up. The
+  # chapters already pulled are the reader's copy and must stay in the
+  # EPUBs, in their places.
+  describe "when the author stubs the start of the story" do
+    let(:fic_info) do
+      {
+        description: "A story.", title: "Sky Pride", author: "Author", cover_image: "fake_cover",
+        volumes: [{ "id" => 1, "title" => "Book 1", "cover" => "x" }, { "id" => 2, "title" => "Book 2", "cover" => "x" }],
+        volume_covers: { 1 => "fake_vol_cover", 2 => "fake_vol_cover" },
+      }
+    end
+
+    # Chapter ids grow as chapters are created; order is the position in the
+    # list Royal Road serves at the time.
+    def toc_entry(id, order, volume_id)
+      { "id" => id, "volumeId" => volume_id, "order" => order, "title" => "Chapter #{id}",
+        "url" => "/fiction/107917/sky-pride/chapter/#{id}/chapter-#{id}" }
+    end
+
+    def epub_titles(filename)
+      Zip::File.open(repo.epub_path(fic_id, filename)) do |zip|
+        zip.entries
+          .filter_map { |entry| [Regexp.last_match(1).to_i, entry] if entry.name =~ %r{text/chapter-(\d+)\.xhtml\z} }
+          .sort_by(&:first)
+          .map { |_, entry| entry.get_input_stream.read[%r{<title>(.*?)</title>}, 1] }
+      end
+    end
+
+    # 100 chapters, 50 per book.
+    let(:original_toc) { (0...100).map { |i| toc_entry(5000 + i, i, i < 50 ? 1 : 2) } }
+    # Chapters 1-80 gone, a teaser (created at stub time) in their place,
+    # chapters 81-100 renumbered from 1, and two new chapters after them.
+    let(:stubbed_toc) do
+      [toc_entry(5150, 0, nil)] +
+        original_toc.drop(80).each_with_index.map { |entry, i| entry.merge("order" => i + 1) } +
+        [toc_entry(5200, 21, 2), toc_entry(5201, 22, 2)]
+    end
+    let(:fetched) { [] }
+
+    before do
+      allow(mock_rr).to receive(:throttle=)
+      allow(mock_rr).to receive(:enrich_overview_chapter!) do |chapter|
+        fetched << chapter.chapter_id
+        chapter.chapter_text = "<p>text of #{chapter.chapter_id}</p>"
+        chapter.chapter_title = "Chapter #{chapter.chapter_id}"
+        chapter
+      end
+      allow(mock_rr).to receive(:chapter_overview).with(fic_id).and_return(original_toc, stubbed_toc)
+      library.follow(url)
+    end
+
+    it "keeps every stubbed chapter in the EPUB, in its place, with the new chapters after" do
+      library.refresh
+      before_stub = epub_titles("Sky Pride.epub")
+      fetched.clear
+
+      library.refresh
+      library.rebuild_all
+      after_stub = epub_titles("Sky Pride.epub")
+
+      expect(fetched).to eq %w[5150 5200 5201]
+      expect(after_stub.first(100)).to eq before_stub
+      expect(after_stub.drop(100)).to eq ["Chapter 5200", "Chapter 5201"]
+    end
+
+    it "saves the teaser, but leaves it out of the EPUBs and says so" do
+      log = StringIO.new
+      library = described_class.new(repo: repo, logger: Logger.new(log), royalroad_session: rr_session, royalroad_client_for: ->(_transport) { mock_rr })
+
+      library.refresh
+      library.refresh
+
+      expect(log.string).to include('Sky Pride: "Chapter 5150" looks like a stubbing teaser; saved, but left out of the EPUBs')
+      expect(repo.chapter_exists?(fic_id, "5150")).to be true
+      expect(PeasantPath::Fic.from_disk(fic_id, repo).chapters.find { |c| c.chapter_id == "5150" }).to be_teaser
+      expect(epub_titles("Sky Pride.epub")).not_to include("Chapter 5150")
+    end
+
+    # A pull builds from the chapters it holds in memory; "Rebuild all", a
+    # rename and the CLI's build read them back from disk. Following a story
+    # that is already stubbed has Royal Road list the teaser ahead of older
+    # chapters, so the two only agree if the pull sorts the same way. (With
+    # nothing pulled yet, nothing marks the teaser as one, so it stays in.)
+    it "builds the same book right after a pull as when rebuilding from disk" do
+      allow(mock_rr).to receive(:chapter_overview).with(fic_id).and_return(stubbed_toc)
+
+      library.refresh
+      after_pull = epub_titles("Sky Pride.epub")
+      library.rebuild_all
+
+      expect(epub_titles("Sky Pride.epub")).to eq after_pull
+      expect(after_pull).to eq((5080...5100).map { |id| "Chapter #{id}" } + ["Chapter 5150", "Chapter 5200", "Chapter 5201"])
+    end
+
+    it "keeps building the volume that was stubbed entirely" do
+      library.refresh
+      book_1 = epub_titles("Sky Pride - Book 1.epub")
+
+      library.refresh
+      library.rebuild_all
+
+      expect(epub_titles("Sky Pride - Book 1.epub")).to eq book_1
+      expect(book_1).to eq((5000...5050).map { |id| "Chapter #{id}" })
+      expect(epub_titles("Sky Pride - Book 2.epub")).to eq((5050...5100).map { |id| "Chapter #{id}" } + ["Chapter 5200", "Chapter 5201"])
+    end
+  end
+
   describe "#rebuild_changed" do
     it "rebuilds only the fics that gained chapters, into the build directory" do
       changed = instance_double(PeasantPath::Fic, fic_id: "1", display_title: "Changed")

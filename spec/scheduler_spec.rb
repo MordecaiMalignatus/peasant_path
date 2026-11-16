@@ -62,8 +62,15 @@ RSpec.describe PeasantPath::Scheduler do
       described_class.systemd_units(
         exec_serve: "/ruby /pr serve --bind 0.0.0.0 --port 9000",
         exec_pull: "/ruby /pr refresh --throttle",
+        path: "/home/u/.local/share/mise/installs/node/26/bin:/usr/bin:/odd%dir",
         interval_hours: 4,
       )
+    end
+
+    it "runs both services with the installing shell's PATH, escaping systemd specifiers" do
+      expected = 'Environment="PATH=/home/u/.local/share/mise/installs/node/26/bin:/usr/bin:/odd%%dir"'
+      expect(units["peasant-path-web.service"]).to include(expected)
+      expect(units["peasant-path-pull.service"]).to include(expected)
     end
 
     it "generates the three expected unit files" do
@@ -93,6 +100,14 @@ RSpec.describe PeasantPath::Scheduler do
     end
   end
 
+  describe ".systemd_command" do
+    it "quotes every word, escaping what systemd would otherwise interpret" do
+      command = described_class.systemd_command("/home/u/my apps/ruby", 'say "hi"\\now', "50%", 4567)
+
+      expect(command).to eq '"/home/u/my apps/ruby" "say \\"hi\\"\\\\now" "50%%" "4567"'
+    end
+  end
+
   describe ".launchd_plist" do
     it "generates the launchd job for refresh" do
       plist = described_class.launchd_plist(
@@ -100,6 +115,7 @@ RSpec.describe PeasantPath::Scheduler do
         script_path: "/bin/peasant_path",
         interval_seconds: 3600,
         log_dir: "/logs",
+        path: "/Users/u/.local/share/mise/installs/node/26/bin:/usr/bin",
       )
 
       expect(plist).to include("<string>/ruby</string>")
@@ -107,6 +123,8 @@ RSpec.describe PeasantPath::Scheduler do
       expect(plist).to include("<string>refresh</string>")
       expect(plist).to include("<integer>3600</integer>")
       expect(plist).to include("<string>/logs/peasant_path.log</string>")
+      expect(described_class.launchd_plist(ruby_path: "/r", script_path: "/a&b/pp", interval_seconds: 1, log_dir: "/l", path: "/p")).to include("<string>/a&amp;b/pp</string>")
+      expect(plist).to match(%r{<key>PATH</key>\s*<string>/Users/u/.local/share/mise/installs/node/26/bin:/usr/bin</string>})
     end
   end
 end

@@ -21,7 +21,7 @@ module PeasantPath
         title: @fic.display_title,
         author: @fic.author,
         cover_path: @fic.repository.cover_image_path(@fic.fic_id),
-        chapters: @fic.chapters,
+        chapters: @fic.book_chapters,
         identifier: @fic.uri,
       ))
     end
@@ -121,7 +121,7 @@ module PeasantPath
     end
 
     def chapters_for_volume(vol)
-      @fic.chapters.select { |c| c.volume_id == vol["id"] }
+      @fic.book_chapters.select { |c| c.volume_id == vol["id"] }
     end
 
     def volume_cover_path(volume_id)

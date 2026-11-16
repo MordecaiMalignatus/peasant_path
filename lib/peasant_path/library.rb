@@ -211,7 +211,11 @@ module PeasantPath
         yield :chapter, fic, saved if block_given?
         saved
       end
-      chapters.concat(new_chapters)
+      new_chapters.select(&:teaser?).each do |chapter|
+        @logger.warn("#{fic.display_title}: \"#{chapter.chapter_title}\" looks like a stubbing teaser; saved, but left out of the EPUBs")
+      end
+      # The same order a later rebuild reads back from disk.
+      chapters.concat(new_chapters).sort_by! { |chapter| fic.reading_order_key(chapter) }
       fic.reload_display_name!.refresh_stats!
       new_chapters
     end

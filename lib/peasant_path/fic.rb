@@ -33,9 +33,12 @@ module PeasantPath
       @chapters ||= discover_chapters_on_disk
     end
 
-    # Cheap count for display: lists the chapter files without reading them.
+    # Cheap count for display: the chapters in the EPUB, from the stats when
+    # the chapters are not loaded, else by listing the chapter files.
     def chapter_count
-      @chapters ? @chapters.size : @repository.list_chapters(@fic_id).size
+      return book_chapters.size if @chapters
+
+      @stats&.dig("chapter_count") || @repository.list_chapters(@fic_id).size
     end
 
     def word_count_estimate
@@ -77,7 +80,24 @@ module PeasantPath
       @repository
         .list_chapters(@fic_id)
         .map { |chapter_file| Chapter.from_disk_content(@repository.read_chapter_from_path(chapter_file), @repository) }
-        .sort_by { |chapter| [chapter.order_number.nil? ? 1 : 0, chapter.order_number || chapter.chapter_id.to_i] }
+        .sort_by { |chapter| reading_order_key(chapter) }
+    end
+
+    # Royal Road's order number is a chapter's position in the chapter list
+    # as it stood when the chapter was pulled. Authors stub a story ahead of a
+    # book release by taking chapters off the front of that list, which
+    # renumbers everything after them, so numbers saved before and after a
+    # stub collide. Royal Road hands out chapter ids in the order chapters are
+    # created, and authors very nearly always publish in that order, so the
+    # id stands in for the reading order and stays put however much of the
+    # story is stubbed. A chapter an author inserts or moves later lands where
+    # its creation date puts it.
+    # Patreon ids carry no order; its chapters keep the order number the
+    # client derives.
+    def reading_order_key(chapter)
+      return [0, chapter.chapter_id.to_i] if @source == Sources::ROYALROAD
+
+      [chapter.order_number.nil? ? 1 : 0, chapter.order_number || chapter.chapter_id.to_i]
     end
 
     def apply_fic_info(info)
@@ -101,8 +121,14 @@ module PeasantPath
       self
     end
 
+    # The chapters that go into the EPUBs: everything pulled but stubbing
+    # teasers.
+    def book_chapters
+      chapters.reject(&:teaser?)
+    end
+
     def refresh_stats!
-      loaded_chapters = chapters
+      loaded_chapters = book_chapters
       @stats = {
         "word_count_estimate" => loaded_chapters.sum(&:word_count_estimate),
         "chapter_count" => loaded_chapters.size,

@@ -13,7 +13,7 @@ RSpec.describe PeasantPath::Epub do
       display_title: "Sky Pride",
       author: "Warby Picus",
       repository: mock_repo,
-      chapters: [],
+      book_chapters: [],
       volumes: [],
     )
   end
@@ -95,7 +95,7 @@ RSpec.describe PeasantPath::Epub do
   describe "#build_volumes" do
     context "when a volume has fewer than 10 chapters" do
       it "skips the volume" do
-        allow(mock_fic).to receive(:chapters).and_return(make_chapters(9, volume_id: 1))
+        allow(mock_fic).to receive(:book_chapters).and_return(make_chapters(9, volume_id: 1))
         allow(mock_fic).to receive(:volumes).and_return([make_volume(id: 1, title: "Vol 1")])
         allow(mock_repo).to receive(:volume_cover_image_path).with("107917", 1).and_return("/no.jpg")
         allow(File).to receive(:exist?).with("/no.jpg").and_return(false)
@@ -111,7 +111,7 @@ RSpec.describe PeasantPath::Epub do
 
     context "when a volume has exactly 10 chapters" do
       it "writes an epub for that volume" do
-        allow(mock_fic).to receive(:chapters).and_return(make_chapters(10, volume_id: 1))
+        allow(mock_fic).to receive(:book_chapters).and_return(make_chapters(10, volume_id: 1))
         allow(mock_fic).to receive(:volumes).and_return([make_volume(id: 1, title: "Vol 1")])
         allow(mock_repo).to receive(:volume_cover_image_path).with("107917", 1).and_return("/no.jpg")
         allow(File).to receive(:exist?).with("/no.jpg").and_return(false)
@@ -126,7 +126,7 @@ RSpec.describe PeasantPath::Epub do
       end
 
       it "sanitizes the volume title for the EPUB filename" do
-        allow(mock_fic).to receive(:chapters).and_return(make_chapters(10, volume_id: 1))
+        allow(mock_fic).to receive(:book_chapters).and_return(make_chapters(10, volume_id: 1))
         allow(mock_fic).to receive(:volumes).and_return([make_volume(id: 1, title: "Vol/1")])
         allow(mock_repo).to receive(:volume_cover_image_path).with("107917", 1).and_return("/no.jpg")
         allow(File).to receive(:exist?).with("/no.jpg").and_return(false)
@@ -143,7 +143,7 @@ RSpec.describe PeasantPath::Epub do
     context "when a volume cover exists on disk" do
       it "uses the volume cover" do
         vol_cover_path = "/config/107917/volume_1_cover.jpg"
-        allow(mock_fic).to receive(:chapters).and_return(make_chapters(10, volume_id: 1))
+        allow(mock_fic).to receive(:book_chapters).and_return(make_chapters(10, volume_id: 1))
         allow(mock_fic).to receive(:volumes).and_return([make_volume(id: 1, title: "Vol 1")])
         allow(mock_repo).to receive(:volume_cover_image_path).with("107917", 1).and_return(vol_cover_path)
         allow(File).to receive(:exist?).with(vol_cover_path).and_return(true)
@@ -159,7 +159,7 @@ RSpec.describe PeasantPath::Epub do
 
     context "when a volume cover does not exist on disk" do
       it "falls back to the fic cover" do
-        allow(mock_fic).to receive(:chapters).and_return(make_chapters(10, volume_id: 1))
+        allow(mock_fic).to receive(:book_chapters).and_return(make_chapters(10, volume_id: 1))
         allow(mock_fic).to receive(:volumes).and_return([make_volume(id: 1, title: "Vol 1")])
         allow(mock_repo).to receive(:volume_cover_image_path).with("107917", 1).and_return("/no.jpg")
         allow(File).to receive(:exist?).with("/no.jpg").and_return(false)
@@ -174,7 +174,7 @@ RSpec.describe PeasantPath::Epub do
     end
 
     it "uses the combined fic and volume title" do
-      allow(mock_fic).to receive(:chapters).and_return(make_chapters(10, volume_id: 1))
+      allow(mock_fic).to receive(:book_chapters).and_return(make_chapters(10, volume_id: 1))
       allow(mock_fic).to receive(:volumes).and_return([make_volume(id: 1, title: "The Feral Daoist")])
       allow(mock_repo).to receive(:volume_cover_image_path).with("107917", 1).and_return("/no.jpg")
       allow(File).to receive(:exist?).with("/no.jpg").and_return(false)
@@ -192,7 +192,7 @@ RSpec.describe PeasantPath::Epub do
     it "only passes chapters belonging to the volume" do
       vol1_chapters = make_chapters(10, volume_id: 1)
       vol2_chapters = make_chapters(3, volume_id: 2)
-      allow(mock_fic).to receive(:chapters).and_return(vol1_chapters + vol2_chapters)
+      allow(mock_fic).to receive(:book_chapters).and_return(vol1_chapters + vol2_chapters)
       allow(mock_fic).to receive(:volumes).and_return([make_volume(id: 1, title: "Vol 1")])
       allow(mock_repo).to receive(:volume_cover_image_path).with("107917", 1).and_return("/no.jpg")
       allow(File).to receive(:exist?).with("/no.jpg").and_return(false)

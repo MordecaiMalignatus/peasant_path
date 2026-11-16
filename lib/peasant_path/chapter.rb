@@ -8,8 +8,15 @@ module PeasantPath
     attr_reader :fic_id, :chapter_id, :uri, :repository, :source
     attr_writer :word_count_estimate
     attr_accessor :chapter_title, :chapter_text, :next_chapter, :previous_chapter, :volume_id, :order_number, :published_at
+    # A stubbing teaser (see RoyalRoadSource#chapter_overview): kept on disk,
+    # left out of the EPUBs.
+    attr_writer :teaser
 
     CHAPTER_REGEX = /https:\/\/www\.royalroad\.com\/fiction\/(\d+)\/[0-9a-z-]+\/chapter\/(\d+)/
+
+    def teaser?
+      @teaser == true
+    end
 
     def ==(other)
       self.class == other.class &&
@@ -58,6 +65,7 @@ module PeasantPath
       c.previous_chapter = content["previous_chapter"]
       c.volume_id = content["volume_id"]
       c.order_number = content["order_number"]
+      c.teaser = content["teaser"] == true
       c.published_at = content["published_at"]
       c.word_count_estimate = content["word_count_estimate"]
 
@@ -108,6 +116,7 @@ module PeasantPath
         order_number: @order_number,
         published_at: @published_at,
         word_count_estimate: word_count_estimate,
+        teaser: teaser?,
       })
 
       self

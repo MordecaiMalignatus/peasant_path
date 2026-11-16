@@ -37,7 +37,7 @@ bin/start                         # then open http://127.0.0.1:4567
 Each step checks first, so running `bin/start` again later goes straight to
 the server. Options are passed on to `serve`, e.g. `bin/start --port 8080`;
 `bin/start --setup-only` installs without starting anything. On Linux, the
-apt installs ask for `sudo`.
+apt installs ask for `sudo` unless you run it as root.
 
 The rest of this README writes the command as `peasant_path`. From a checkout,
 that is `bundle exec bin/peasant_path`. If mise is installed but not
@@ -112,6 +112,12 @@ hand the job to the OS. `install` detects the host's scheduler:
 peasant_path install [--interval HOURS] [--port N] [--bind ADDR]
 ```
 
+The jobs run the Ruby and the `bin/peasant_path` that ran `install`, and keep
+the `PATH` it ran with so the browser driver finds the same Node. From a
+checkout with mise, run it as `mise exec -- bundle exec bin/peasant_path install`
+(or from a shell where mise is activated). Run `install` again after upgrading
+Ruby or Node, since the jobs point at the versions installed at the time.
+
 **systemd (Linux).** Installs `--user` units: a web service kept alive by
 `Restart=always`, plus a timer that runs `refresh --throttle` periodically.
 
@@ -148,7 +154,10 @@ peasant_path browser install      # one-off: npm-installs the driver and Chromiu
 `~/.config/peasant_path/patreon/driver/`, so it works for an installed gem as
 well as a checkout. (From a checkout, `bin/start` does the same into
 `./node_modules`, which the driver lookup also checks.) On Linux,
-Chromium additionally needs system libraries: `sudo <driver>/node_modules/.bin/playwright-core install-deps chromium`.
+Chromium additionally needs system libraries:
+`sudo "$(command -v node)" <driver>/node_modules/playwright-core/cli.js install-deps chromium`
+(naming `node` explicitly, because `sudo` resets the PATH and would not find
+a Node installed through mise or nvm).
 `PEASANT_PATH_PLAYWRIGHT_CLI` overrides the lookup with an explicit
 `playwright-core` path.
 

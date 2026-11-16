@@ -84,16 +84,28 @@ RSpec.describe PeasantPath::Fic do
       expect(mock_repo).to have_received(:list_chapters).once
     end
 
-    it "sorts chapters by order number, falling back to chapter id" do
+    def stub_chapters_on_disk(chapter_1, chapter_2)
       path_1 = "/config/#{fic_id}/2113501"
       path_2 = "/config/#{fic_id}/2113560"
-      chapter_1 = old_chapter_1_disk.merge("order_number" => 1)
-      chapter_2 = old_chapter_2_disk.merge("order_number" => 0)
       allow(mock_repo).to receive(:list_chapters).with(fic_id).and_return([path_1, path_2])
       allow(mock_repo).to receive(:read_chapter_from_path).with(path_1).and_return(chapter_1)
       allow(mock_repo).to receive(:read_chapter_from_path).with(path_2).and_return(chapter_2)
+    end
+
+    it "orders Royal Road chapters by chapter id, whatever order number was saved with them" do
+      # Saved after a stub renumbered Royal Road's list: the later chapter got
+      # a lower position than the earlier one had.
+      stub_chapters_on_disk(old_chapter_1_disk.merge("order_number" => 80), old_chapter_2_disk.merge("order_number" => 0))
 
       fic = described_class.new(fic_id: fic_id, repository: mock_repo)
+
+      expect(fic.chapters.map(&:chapter_id)).to eq ["2113501", "2113560"]
+    end
+
+    it "orders other sources' chapters by order number, falling back to chapter id" do
+      stub_chapters_on_disk(old_chapter_1_disk.merge("order_number" => 1), old_chapter_2_disk.merge("order_number" => 0))
+
+      fic = described_class.new(fic_id: fic_id, repository: mock_repo, source: PeasantPath::Sources::PATREON)
 
       expect(fic.chapters.map(&:chapter_id)).to eq ["2113560", "2113501"]
     end

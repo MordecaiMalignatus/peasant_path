@@ -1,3 +1,11 @@
+# Everything Peasant Path reads is UTF-8: scraped pages, the chapters and
+# metadata on disk, and the JSON the Playwright driver sends back. Ruby takes
+# its default encoding from the locale, and a process started without one (a
+# minimal server, a service manager with no LANG) gets US-ASCII. Decoding the
+# first non-ASCII byte then raises, and when that happens on playwright-ruby-
+# client's reader thread the pull waits for a reply forever.
+Encoding.default_external = Encoding::UTF_8
+
 require "peasant_path/version"
 require "peasant_path/config"
 require "peasant_path/disk_repository"
